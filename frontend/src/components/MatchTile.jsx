@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 import EventFeed from './EventFeed.jsx';
 
 function StatusBadge({ match }) {
@@ -33,7 +34,7 @@ export default function MatchTile({ match }) {
   }, [scoreKey]);
 
   return (
-    <div className="card match-tile">
+    <Link to={`/matches/${match.id}`} className="card match-tile tile-link">
       <div className="match-head">
         <StatusBadge match={match} />
       </div>
@@ -45,6 +46,6 @@ export default function MatchTile({ match }) {
         <span className="team">{match.away_team}</span>
       </div>
       <EventFeed events={match.events} />
-    </div>
+    </Link>
   );
 }

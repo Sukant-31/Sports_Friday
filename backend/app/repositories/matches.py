@@ -101,6 +101,51 @@ async def find_live_matches_for_user(user_id) -> list[asyncpg.Record]:
     )
 
 
+async def find_match_for_user(user_id, match_id) -> asyncpg.Record | None:
+    """A single match (any status) — but only if the user follows one of its
+    teams, so the detail view can't expose arbitrary matches."""
+    return await db.fetchrow(
+        """
+        SELECT m.id, m.external_id, m.status, m.home_score, m.away_score, m.minute,
+               ht.name AS home_team, at.name AS away_team, m.starts_at
+        FROM matches m
+        JOIN teams ht ON ht.id = m.home_team_id
+        JOIN teams at ON at.id = m.away_team_id
+        WHERE m.id = $1
+          AND EXISTS (
+            SELECT 1 FROM subscriptions s
+            WHERE s.user_id = $2 AND s.team_id IN (m.home_team_id, m.away_team_id)
+          )
+        """,
+        match_id,
+        user_id,
+    )
+
+
+async def find_all_events_for_match(match_id) -> list[asyncpg.Record]:
+    """Full de-duplicated event timeline for one match, oldest first."""
+    return await db.fetch(
+        """
+        WITH deduped AS (
+            SELECT DISTINCT ON (
+                     type,
+                     COALESCE(detail->>'minute', ''),
+                     COALESCE(detail->>'player', '')
+                   )
+                   type, detail, created_at, id
+            FROM match_events
+            WHERE match_id = $1
+            ORDER BY type,
+                     COALESCE(detail->>'minute', ''),
+                     COALESCE(detail->>'player', ''), id
+        )
+        SELECT type, detail, created_at FROM deduped
+        ORDER BY created_at ASC, id ASC
+        """,
+        match_id,
+    )
+
+
 async def find_recent_events_for_matches(
     match_ids: list, per_match_limit: int = 6
 ) -> list[asyncpg.Record]:

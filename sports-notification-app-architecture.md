@@ -139,6 +139,7 @@ PATCH  /api/subscriptions/:id    -> update preferences
 DELETE /api/subscriptions/:id
 
 GET    /api/matches/live         -> live matches for teams the user follows (for dashboard)
+GET    /api/matches/:id          -> one match + full event timeline (detail view; 404 unless the user follows a team in it)
 
 POST   /api/push/subscribe       { endpoint, keys: { p256dh, auth } } -> store push_subscription
 DELETE /api/push/subscribe       -> remove on unsubscribe

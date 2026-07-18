@@ -3,6 +3,7 @@ import { useAuth } from './lib/auth.jsx';
 import Login from './pages/Login.jsx';
 import Signup from './pages/Signup.jsx';
 import Dashboard from './pages/Dashboard.jsx';
+import MatchDetail from './pages/MatchDetail.jsx';
 import Search from './pages/Search.jsx';
 import Settings from './pages/Settings.jsx';
 
@@ -31,6 +32,7 @@ export default function App() {
       <main className="container">
         <Routes>
           <Route path="/" element={<Dashboard />} />
+          <Route path="/matches/:id" element={<MatchDetail />} />
           <Route path="/search" element={<Search />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="/login" element={<Login />} />

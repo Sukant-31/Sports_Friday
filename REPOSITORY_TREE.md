@@ -98,6 +98,7 @@ sports-notification-app/
 │       │   ├── Login.jsx
 │       │   ├── Signup.jsx
 │       │   ├── Dashboard.jsx       # live matches: polling, minute, event feed
+│       │   ├── MatchDetail.jsx     # one match + full timeline (/matches/:id)
 │       │   ├── Search.jsx          # find & follow teams
 │       │   └── Settings.jsx        # per-team notify_* toggles
 │       └── components/

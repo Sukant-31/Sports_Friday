@@ -30,6 +30,7 @@ export const api = {
   unsubscribe: (id) => request(`/subscriptions/${id}`, { method: 'DELETE' }),
 
   liveMatches: () => request('/matches/live'),
+  matchDetail: (id) => request(`/matches/${id}`),
 
   vapidKey: () => request('/push/vapid-public-key'),
   registerPush: (subscription) =>
