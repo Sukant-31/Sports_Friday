@@ -1,5 +1,5 @@
 import { Routes, Route, Navigate, Link, useNavigate } from 'react-router-dom';
-import { useAuth } from './lib/auth.js';
+import { useAuth } from './lib/auth.jsx';
 import Login from './pages/Login.jsx';
 import Signup from './pages/Signup.jsx';
 import Dashboard from './pages/Dashboard.jsx';

@@ -3,6 +3,7 @@ and the 'no heavy ORM' design intent from the architecture doc."""
 
 from __future__ import annotations
 
+import json
 import ssl
 from typing import Any
 
@@ -11,6 +12,14 @@ import asyncpg
 from app.config import settings
 
 _pool: asyncpg.Pool | None = None
+
+
+async def _init_connection(conn: asyncpg.Connection) -> None:
+    # Encode/decode jsonb as Python dict/list transparently, so callers pass and
+    # receive dicts (not JSON strings) for `detail` columns.
+    await conn.set_type_codec(
+        "jsonb", encoder=json.dumps, decoder=json.loads, schema="pg_catalog"
+    )
 
 
 async def connect() -> asyncpg.Pool:
@@ -23,6 +32,7 @@ async def connect() -> asyncpg.Pool:
             min_size=1,
             max_size=10,
             ssl=ssl_ctx,
+            init=_init_connection,
         )
     return _pool
 

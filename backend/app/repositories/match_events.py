@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import json
-
 import asyncpg
 
 from app import db
@@ -15,14 +13,14 @@ async def record_event_if_new(
     return await db.fetchrow(
         """
         INSERT INTO match_events (match_id, team_id, type, detail, dedup_key)
-        VALUES ($1, $2, $3, $4::jsonb, $5)
+        VALUES ($1, $2, $3, $4, $5)
         ON CONFLICT (dedup_key) DO NOTHING
         RETURNING id, match_id, team_id, type, detail
         """,
         match_id,
         team_id,
         event_type,
-        json.dumps(detail),
+        detail,
         dedup_key,
     )
 

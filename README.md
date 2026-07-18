@@ -30,7 +30,7 @@ layout of this repo.
 
 ## Prerequisites
 
-- Python ≥ 3.11, Node.js ≥ 20 + [pnpm](https://pnpm.io), Docker
+- Python ≥ 3.11, Node.js ≥ 20, Docker
 
 ## Getting started
 
@@ -56,7 +56,7 @@ python -m app.workers.poller                     # poller
 arq app.workers.notifier.WorkerSettings          # notifier
 
 # 5. Frontend (another terminal)
-cd frontend && pnpm install && pnpm dev          # http://localhost:5173
+cd frontend && npm install && npm run dev        # http://localhost:5173
 ```
 
 ## Testing

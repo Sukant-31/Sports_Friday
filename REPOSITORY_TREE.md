@@ -22,7 +22,8 @@ sports-notification-app/
 ├── migrations/                     # plain SQL, forward-only, run in order
 │   ├── 001_init.sql                # users, teams, subscriptions, matches, push_subscriptions
 │   ├── 002_match_events.sql        # match_events ledger (dedup)
-│   └── 003_indexes.sql             # hot-path indexes from §4
+│   ├── 003_indexes.sql             # hot-path indexes from §4
+│   └── 004_match_minute.sql        # live match minute (dashboard)
 │
 ├── backend/                        # Python 3.11+ — FastAPI API + workers
 │   ├── pyproject.toml              # deps + pytest/ruff config
@@ -87,16 +88,17 @@ sports-notification-app/
 │       ├── registerSW.js           # register SW + request permission + POST /push/subscribe
 │       ├── lib/
 │       │   ├── api.js              # fetch wrapper, credentials: 'include'
-│       │   └── auth.js             # auth context/hook
+│       │   └── auth.jsx            # auth context/hook
 │       ├── pages/
 │       │   ├── Login.jsx
 │       │   ├── Signup.jsx
-│       │   ├── Dashboard.jsx       # live scores for followed teams
+│       │   ├── Dashboard.jsx       # live matches: polling, minute, event feed
 │       │   ├── Search.jsx          # find & follow teams
 │       │   └── Settings.jsx        # per-team notify_* toggles
 │       └── components/
 │           ├── TeamCard.jsx
-│           ├── MatchTile.jsx
+│           ├── MatchTile.jsx       # score + status badge + score-flash
+│           ├── EventFeed.jsx       # recent goals/cards/kickoff/full-time
 │           └── NotificationToggle.jsx
 │
 └── deploy/

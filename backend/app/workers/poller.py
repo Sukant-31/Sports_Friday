@@ -81,7 +81,11 @@ async def poll_match(client: SportsApiClient, queue: ArqRedis, match) -> None:
     }
     await set_match_state(str(match["id"]), next_state)
     await matches_repo.update_match_state(
-        match["id"], fixture["status"], fixture["home_score"], fixture["away_score"]
+        match["id"],
+        fixture["status"],
+        fixture["home_score"],
+        fixture["away_score"],
+        fixture.get("minute"),
     )
 
 
