@@ -35,6 +35,10 @@ class Settings(BaseSettings):
     vapid_private_key: str = Field("", alias="VAPID_PRIVATE_KEY")
     vapid_subject: str = Field("mailto:you@example.com", alias="VAPID_SUBJECT")
 
+    # "webpush" (real Web Push) or "console" (log payloads — for local dev/demo
+    # without a browser subscription).
+    push_transport: str = Field("webpush", alias="PUSH_TRANSPORT")
+
     api_port: int = Field(8000, alias="API_PORT")
     poll_interval_seconds: int = Field(20, alias="POLL_INTERVAL_SECONDS")
     cors_origin: str = Field("http://localhost:5173", alias="CORS_ORIGIN")

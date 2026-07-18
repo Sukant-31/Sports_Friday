@@ -20,6 +20,17 @@ def _vapid_claims() -> dict[str, str]:
 
 
 async def send_push(target: dict[str, Any], payload: dict[str, Any]) -> None:
+    # Console transport: log instead of sending. Lets the full poller/notifier
+    # flow run locally without a real browser push subscription.
+    if settings.push_transport == "console":
+        log.info(
+            "PUSH → %s  |  %s — %s",
+            target.get("endpoint"),
+            payload.get("title"),
+            payload.get("body"),
+        )
+        return
+
     if not settings.vapid_private_key:
         raise RuntimeError("VAPID keys are not set — run scripts/gen_vapid.py")
 
