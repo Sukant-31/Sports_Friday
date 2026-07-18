@@ -1,0 +1,21 @@
+# Backend image (API and/or workers — same image, different CMD).
+#   docker build -f deploy/Dockerfile.backend -t sports-backend .
+FROM python:3.12-slim
+
+WORKDIR /app
+
+# Install deps first for better layer caching.
+COPY backend/pyproject.toml backend/
+RUN pip install --no-cache-dir -e backend/ || true
+COPY backend backend
+COPY migrations migrations
+RUN pip install --no-cache-dir -e backend/
+
+ENV ENV=production PYTHONUNBUFFERED=1
+WORKDIR /app/backend
+EXPOSE 8000
+
+# API by default. Override CMD for the workers:
+#   poller:   python -m app.workers.poller
+#   notifier: arq app.workers.notifier.WorkerSettings
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

@@ -1,5 +1,5 @@
 # Local dev dependencies only (Postgres + Redis).
-# App services run on the host via `pnpm dev:*` for a fast reload loop.
+# App services run on the host (uvicorn / arq / vite) for a fast reload loop.
 services:
   postgres:
     image: postgres:16-alpine

@@ -17,12 +17,15 @@ A web app where users follow specific teams/players in one sport (football/socce
 | Layer | Choice | Why |
 |---|---|---|
 | Frontend | React + Vite, plain CSS or Tailwind | Fast dev loop, PWA-ready |
-| Backend API | Node.js + Express (or Fastify) | Matches frontend language, simple deploy |
+| Backend API | **Python + FastAPI (uvicorn)** | Async, first-class typing/validation (pydantic), great DX |
+| DB access | **asyncpg + raw SQL** | Async, fast, keeps migrations as plain SQL (no heavy ORM) |
+| Validation | **pydantic v2** | Request/response models and settings validation |
 | Database | PostgreSQL | Relational data (users, subscriptions, matches) fits well |
-| Cache / Queue | Redis + BullMQ | One dependency does both caching and job queueing |
-| Push delivery | Web Push API (VAPID) | No third-party account needed, works in any browser; swap for FCM later if a native app is added |
-| Sports data | API-Football (or TheSportsDB for a free tier) | Reasonable free tier, documented live-event endpoints |
-| Auth | JWT with httpOnly cookies | Simple, no external auth provider needed |
+| Cache / Queue | **Redis + arq** | Redis caches last-seen match state; arq is the async job queue |
+| Push delivery | Web Push API (VAPID) via **pywebpush** | No third-party account needed, works in any browser; swap for FCM later if a native app is added |
+| Sports data | API-Football (or TheSportsDB for a free tier) via **httpx** | Reasonable free tier, documented live-event endpoints |
+| Auth | JWT (**PyJWT**) with httpOnly cookies + **bcrypt** | Simple, no external auth provider needed |
+| Rate limiting | **slowapi** | Blunts credential stuffing + sports-API cost abuse |
 | Deployment | Railway / Render (backend + Postgres + Redis), Vercel (frontend) | Free/cheap tiers, minimal ops |
 
 ---
@@ -34,10 +37,12 @@ A web app where users follow specific teams/players in one sport (football/socce
 3. **Polling worker** — background process; every 15–30s, fetches live match data *only for matches with active subscribers*, diffs against last known state, and enqueues detected events.
 4. **Notification worker** — consumes the event queue, resolves subscribed users per event, sends push notifications.
 5. **PostgreSQL** — persistent data: users, subscriptions, matches, push_subscriptions.
-6. **Redis** — BullMQ queue + short-lived cache of last-seen match state (avoids hitting Postgres on every poll tick).
+6. **Redis** — arq job queue + short-lived cache of last-seen match state (avoids hitting Postgres on every poll tick).
 7. **External sports API** — source of truth for live match data.
 
-Data flow: `Sports API → Polling worker → Redis queue → Notification worker → Web Push → browser service worker → OS notification`.
+Data flow: `Sports API → Polling worker → Redis (arq) queue → Notification worker → Web Push → browser service worker → OS notification`.
+
+The API, poller, and notifier are three separate processes sharing the `backend/app` codebase (FastAPI app, an asyncio poll loop, and an arq worker respectively).
 
 ---
 
@@ -143,37 +148,37 @@ DELETE /api/push/subscribe       -> remove on unsubscribe
 
 ## 6. Background workers
 
-### Polling worker (`workers/poller.js`)
-Runs on a fixed interval (e.g. every 20s via `setInterval` or a cron-style scheduler):
+### Polling worker (`backend/app/workers/poller.py`)
+A standalone asyncio loop (`asyncio.sleep(POLL_INTERVAL_SECONDS)`), run as its own process:
 
 1. Query `matches` for rows where `status IN ('scheduled','live')` **and** have at least one row in `subscriptions` for their team — skip matches nobody follows.
-2. For each, call the sports API's live-match endpoint.
-3. Compare returned state to the cached state in Redis (`match:{id}:state`).
+2. For each, call the sports API's live-match endpoint (via `httpx`).
+3. Compare returned state to the cached state in Redis (`match:{id}:state`). The pure `diff_match(prev, next)` function returns the list of events.
 4. On diff, determine event type:
    - score changed → `goal` event (include scorer if API provides it)
    - status changed to `live` → `kickoff` event
    - status changed to `finished` → `full_time` event
    - card data changed → `card` event
 5. **Dedup before enqueue.** Build the deterministic `dedup_key` and `INSERT ... ON CONFLICT (dedup_key) DO NOTHING` into `match_events`. If no row was inserted, the event was already handled — skip it. Only on a fresh insert do you enqueue.
-6. Push each fresh event onto the BullMQ queue `match-events` with payload `{ matchEventId, matchId, teamId, type, detail }`.
+6. Enqueue each fresh event as an arq `notify_match_event` job with payload `{ match_event_id, match_id, team_id, type, detail }`.
 7. Update Redis cache and the `matches` row.
 
-**Cold start / cache miss:** if `match:{id}:state` is absent in Redis (worker restart, TTL expiry), do **not** treat the entire current state as new events — rehydrate the baseline from the `matches` row (scores/status) and the `match_events` ledger, so only genuinely new events fire. Redis is an optimization; Postgres is the source of truth for "what have we already notified about."
+**Cold start / cache miss:** if `match:{id}:state` is absent in Redis (worker restart, TTL expiry), do **not** treat the entire current state as new events — rehydrate the baseline from the `matches` row (scores/status) and the `match_events` ledger, so only genuinely new events fire. Redis is an optimization; Postgres is the source of truth for "what have we already notified about." First sight of a match (no baseline) emits only lifecycle events, never phantom goals.
 
-### Notification worker (`workers/notifier.js`)
-Consumes `match-events` queue:
+### Notification worker (`backend/app/workers/notifier.py`)
+An arq worker (`arq app.workers.notifier.WorkerSettings`) consuming `notify_match_event` jobs:
 
-1. For the event's `teamId`, query `subscriptions` joined with `push_subscriptions` for users who want this event type (respect `notify_goals`/`notify_cards`/`notify_match_status`).
-2. For each push subscription, send a Web Push message using the `web-push` npm package and the stored VAPID keys.
+1. For the event's `team_id`, query `subscriptions` joined with `push_subscriptions` for users who want this event type (respect `notify_goals`/`notify_cards`/`notify_match_status`).
+2. For each push subscription, send a Web Push message using `pywebpush` and the stored VAPID keys.
 3. On a `410 Gone` or `404` response (expired subscription), delete that `push_subscriptions` row.
-4. Let BullMQ handle retries with backoff on transient send failures. Because enqueue is gated by the `match_events` ledger, a retried job re-notifies the same event to the same users at most once per delivery attempt — acceptable — but a *new* poll tick will never duplicate it.
+4. Let arq handle retries with backoff (`max_tries`) on transient send failures. Because enqueue is gated by the `match_events` ledger, a retried job re-notifies the same event to the same users at most once per delivery attempt — acceptable — but a *new* poll tick will never duplicate it.
 
 ---
 
 ## 7. Frontend structure
 
 ```
-src/
+frontend/src/
   pages/
     Login.jsx
     Signup.jsx
@@ -201,14 +206,21 @@ self.addEventListener('push', event => {
 
 ## 8. Environment variables
 
+Loaded by pydantic-settings from a single `.env` at the repo root (see `.env.example`):
 ```
-DATABASE_URL=postgres://...
+DATABASE_URL=postgresql://...
 REDIS_URL=redis://...
 JWT_SECRET=...
+AUTH_COOKIE_NAME=sports_token
 SPORTS_API_KEY=...
+SPORTS_API_BASE_URL=https://v3.football.api-sports.io
 VAPID_PUBLIC_KEY=...
 VAPID_PRIVATE_KEY=...
 VAPID_SUBJECT=mailto:you@example.com
+API_PORT=8000
+POLL_INTERVAL_SECONDS=20
+CORS_ORIGIN=http://localhost:5173
+ENV=development
 ```
 
 ---
@@ -229,7 +241,7 @@ VAPID_SUBJECT=mailto:you@example.com
 - Verify it correctly detects goals/status changes on a real live match (test during an actual game, or mock the API response).
 
 **Phase 4 — Queue + notifications**
-- Add BullMQ, wire poller to enqueue events.
+- Add arq, wire poller to enqueue events.
 - Build notifier worker, implement Web Push sending.
 - Add push subscription flow on the frontend (request permission, register service worker, POST to `/api/push/subscribe`).
 
@@ -249,14 +261,15 @@ VAPID_SUBJECT=mailto:you@example.com
 - Hash passwords with `bcrypt` (cost ≥ 12) or `argon2`; never store or log plaintext. Auth cookie: `httpOnly`, `secure` (prod), `sameSite=lax`.
 - Every notification path must be idempotent — see the `match_events` ledger. Assume the poller, the queue, and the notifier can each retry; a user should never get two "GOAL!" pushes for the same goal.
 - Add backoff + a circuit breaker around the sports API. On `429`/`5xx`, back off exponentially and widen the poll interval; a followed match going un-polled for a tick is fine, a rate-limit ban is not.
-- Rate-limit auth and search endpoints (e.g. `express-rate-limit`) to blunt credential stuffing and API-cost abuse.
+- Rate-limit auth and search endpoints (`slowapi`) to blunt credential stuffing and API-cost abuse.
+- Bind `uuid` columns with `UUID` objects (not strings) — asyncpg is strict about types; the auth dependency returns a `UUID` for this reason.
 
 ---
 
 ## 11. Testing strategy
 
-- **Unit:** the poller's diff/dedup logic — feed two consecutive API snapshots, assert the exact set of events emitted (and that a repeat snapshot emits nothing).
-- **Integration:** auth + subscription CRUD against a throwaway Postgres (Testcontainers or a `docker compose` test db).
+- **Unit (`pytest`):** the poller's `diff_match` / `dedup_key` logic — feed two consecutive API snapshots, assert the exact set of events emitted (and that a repeat snapshot emits nothing). These are pure functions with no I/O.
+- **Integration:** auth + subscription CRUD against a throwaway Postgres (the CI Postgres service, or a `docker compose` test db).
 - **Contract/mock:** record a real sports-API live-match response and replay it as a fixture so tests don't depend on a live game.
 - **E2E (manual for v1):** register a push subscription in a real browser, enqueue a synthetic event, confirm the OS notification fires.
 

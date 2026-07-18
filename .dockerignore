@@ -1,12 +1,21 @@
-node_modules
-**/node_modules
 .git
 .env
 .env.*
 !.env.example
-dist
-build
-coverage
+
+# Python
+**/__pycache__
+**/*.pyc
+**/.venv
+**/.pytest_cache
+**/.ruff_cache
+
+# Node (frontend)
+**/node_modules
+frontend/dist
+.vite
+
+# Misc
 *.log
 .vscode
 .idea

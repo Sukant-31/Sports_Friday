@@ -8,59 +8,66 @@ See [`sports-notification-app-architecture.md`](./sports-notification-app-archit
 for the full design and [`REPOSITORY_TREE.md`](./REPOSITORY_TREE.md) for the
 layout of this repo.
 
-## Monorepo layout
+## Stack
 
-| Package | What it is |
+| Part | Tech |
 |---|---|
-| `packages/shared` | DB pool + queries, Redis, BullMQ queue, sports-API client, config, logger |
-| `packages/api` | Express HTTP API (auth, subscriptions, teams, matches, push) |
-| `packages/workers` | Poller (detects events) + notifier (sends Web Push) |
-| `packages/web` | React + Vite PWA |
+| Backend API | Python + FastAPI (uvicorn), asyncpg, pydantic |
+| Workers | asyncio poller + arq notifier |
+| Database | PostgreSQL |
+| Cache / queue | Redis + arq |
+| Push | Web Push (VAPID) via pywebpush |
+| Frontend | React + Vite (PWA) |
+
+## Layout
+
+| Path | What it is |
+|---|---|
+| `backend/` | FastAPI API + poller + notifier (one codebase, three processes) |
+| `frontend/` | React + Vite PWA |
+| `migrations/` | plain, forward-only SQL |
+| `deploy/` | Dockerfile + Render/Vercel configs |
 
 ## Prerequisites
 
-- Node.js ≥ 20 and [pnpm](https://pnpm.io) (`npm i -g pnpm`)
-- Docker (for local Postgres + Redis)
+- Python ≥ 3.11, Node.js ≥ 20 + [pnpm](https://pnpm.io), Docker
 
 ## Getting started
 
 ```bash
-# 1. Install all workspace deps
-pnpm install
-
-# 2. Start Postgres + Redis
+# 1. Start Postgres + Redis
 docker compose up -d
 
-# 3. Configure env
+# 2. Configure env
 cp .env.example .env
-pnpm gen:vapid          # prints VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY -> paste into .env
-#   also set SPORTS_API_KEY and a random JWT_SECRET
 
-# 4. Run migrations
-pnpm migrate
+# 3. Backend
+cd backend
+python -m venv .venv && source .venv/bin/activate
+pip install -e ".[dev]"
+set -a; source ../.env; set +a        # load env into the shell
+python scripts/gen_vapid.py           # paste keys into ../.env
+python scripts/migrate.py             # apply migrations
+python scripts/seed.py                # optional demo teams
 
-# 5. (optional) seed a few teams
-pnpm seed
+# 4. Run the three backend processes (separate terminals)
+uvicorn app.main:app --reload --port 8000        # API
+python -m app.workers.poller                     # poller
+arq app.workers.notifier.WorkerSettings          # notifier
 
-# 6. Run the services (separate terminals)
-pnpm dev:api            # http://localhost:4000
-pnpm dev:workers        # poller + notifier
-pnpm dev:web            # http://localhost:5173
+# 5. Frontend (another terminal)
+cd frontend && pnpm install && pnpm dev          # http://localhost:5173
 ```
 
 ## Testing
 
 ```bash
-pnpm test               # runs tests across all packages
+cd backend && pytest        # pure diff/dedup unit tests
 ```
-
-The core event-detection logic (`packages/workers/src/diff.js`) is covered by
-pure unit tests that don't need a live match.
 
 ## Notes
 
 - Web Push needs HTTPS in production; `localhost` is exempt for dev.
-- Only matches with at least one subscriber are polled — see the architecture
-  doc, §10.
+- Only matches with at least one subscriber are polled (architecture doc, §10).
 - Notifications are de-duplicated via the `match_events` ledger, so a restart
   never re-sends an old goal alert.

@@ -1,32 +1,39 @@
-# Dependencies
-node_modules/
-.pnp/
-.pnp.js
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
 
-# Env / secrets
+# --- Node (frontend) ---
+node_modules/
+frontend/dist/
+.vite/
+
+# --- Env / secrets ---
 .env
 .env.*
 !.env.example
 *.pem
 vapid-keys.json
 
-# Build output
-dist/
+# --- Build / coverage ---
 build/
-.vite/
 coverage/
+htmlcov/
+.coverage
 
-# Logs
+# --- Logs ---
 *.log
-npm-debug.log*
-pnpm-debug.log*
-yarn-debug.log*
 
-# Claude Code local settings
+# --- Claude Code local settings ---
 .claude/settings.local.json
 .claude/*.tmp.*
 
-# Editor / OS
+# --- Editor / OS ---
 .DS_Store
 .idea/
 .vscode/
