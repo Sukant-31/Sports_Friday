@@ -71,6 +71,8 @@ sports-notification-app/
 │   │   ├── gen_vapid.py            # print a VAPID key pair for .env
 │   │   ├── check_sports_api.py     # verify a real SPORTS_API_KEY works
 │   │   ├── demo_flow.py            # mock-data poller→notifier demo
+│   │   ├── live_setup.py           # follow team(s) + discover fixtures (live test)
+│   │   ├── live_test.sh            # one-command live test: infra + all services
 │   │   └── seed.py                 # optional demo teams
 │   └── tests/
 │       ├── test_diff.py            # core unit test: snapshots -> exact events

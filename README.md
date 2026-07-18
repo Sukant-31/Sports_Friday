@@ -62,8 +62,27 @@ cd frontend && npm install && npm run dev        # http://localhost:5173
 ## Testing
 
 ```bash
-cd backend && pytest        # pure diff/dedup unit tests
+cd backend && pytest        # unit + (with Postgres/Redis up) integration tests
 ```
+
+## Live test (real sports API)
+
+With a real `SPORTS_API_KEY` in `.env`, verify the key and then run everything
+in one command:
+
+```bash
+cd backend
+set -a; source ../.env; set +a
+.venv/bin/python scripts/check_sports_api.py        # confirm the key works
+
+# brings up Postgres+Redis, migrates, follows the team(s), and runs
+# API + poller + notifier (console push) — Ctrl-C stops it all
+scripts/live_test.sh "Arsenal" "Real Madrid"
+```
+
+It prints upcoming/live fixtures for the followed teams and creates a demo
+login (`demo@local` / `demo1234`) you can use on the dashboard. When a followed
+match is live, goal/card/kickoff/full-time events print as `PUSH → …` lines.
 
 ## Notes
 

@@ -132,8 +132,14 @@ class MockSportsApiClient:
         match_external_id = self._timeline[0][1]["response"][0]["fixture"]["id"]
         return build_team_fixtures(match_external_id)
 
-    async def search_teams(self, q: str) -> dict[str, Any]:  # pragma: no cover
-        return {"response": []}
+    async def search_teams(self, q: str) -> dict[str, Any]:
+        # Return the mock home team regardless of query, so follow/setup flows
+        # can be exercised without a real API key.
+        return {
+            "response": [
+                {"team": {"id": HOME_ID, "name": "Home FC"}, "league": {"name": "Demo League"}}
+            ]
+        }
 
     async def aclose(self) -> None:
         return None
