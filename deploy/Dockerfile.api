@@ -1,0 +1,19 @@
+# Build the API service from the monorepo root:
+#   docker build -f deploy/Dockerfile.api -t sports-api .
+FROM node:20-alpine AS base
+RUN corepack enable
+WORKDIR /app
+
+# Install deps using the lockfile + workspace manifests only (better caching).
+COPY pnpm-workspace.yaml package.json pnpm-lock.yaml* ./
+COPY packages/shared/package.json packages/shared/
+COPY packages/api/package.json packages/api/
+RUN pnpm install --frozen-lockfile --prod=false
+
+# Copy source
+COPY packages/shared packages/shared
+COPY packages/api packages/api
+
+ENV NODE_ENV=production
+EXPOSE 4000
+CMD ["node", "packages/api/src/index.js"]

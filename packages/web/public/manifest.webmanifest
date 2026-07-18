@@ -1,0 +1,16 @@
+{
+  "name": "Sports Alerts",
+  "short_name": "Sports Alerts",
+  "description": "Real-time push notifications for live football matches",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#0b7a3b",
+  "icons": [
+    {
+      "src": "/icon.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    }
+  ]
+}
