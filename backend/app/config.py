@@ -41,6 +41,11 @@ class Settings(BaseSettings):
 
     api_port: int = Field(8000, alias="API_PORT")
     poll_interval_seconds: int = Field(20, alias="POLL_INTERVAL_SECONDS")
+    # How often to (re)discover fixtures for subscribed teams. Much slower than
+    # polling — the free API tier has a tight daily request budget.
+    discover_interval_seconds: int = Field(3600, alias="DISCOVER_INTERVAL_SECONDS")
+    # How many upcoming fixtures to pull per team on each discovery pass.
+    fixtures_lookahead: int = Field(10, alias="FIXTURES_LOOKAHEAD")
     cors_origin: str = Field("http://localhost:5173", alias="CORS_ORIGIN")
 
     @property

@@ -37,3 +37,14 @@ async def find_team_by_id(team_id) -> asyncpg.Record | None:
     return await db.fetchrow(
         "SELECT id, external_id, name, league FROM teams WHERE id = $1", team_id
     )
+
+
+async def find_subscribed_teams() -> list[asyncpg.Record]:
+    """Teams that at least one user follows — the set discovery pulls fixtures for."""
+    return await db.fetch(
+        """
+        SELECT DISTINCT t.id, t.external_id, t.name
+        FROM teams t
+        JOIN subscriptions s ON s.team_id = t.id
+        """
+    )

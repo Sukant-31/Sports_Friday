@@ -13,6 +13,31 @@ HOME_ID = 100
 AWAY_ID = 200
 
 
+def _fixture_obj(
+    external_id: str,
+    status_short: str,
+    home_score: int,
+    away_score: int,
+    minute: int | None,
+    events: list[dict[str, Any]],
+    date: str | None = None,
+) -> dict[str, Any]:
+    """One raw API-Football-shaped fixture object."""
+    return {
+        "fixture": {
+            "id": external_id,
+            "date": date,
+            "status": {"short": status_short, "elapsed": minute},
+        },
+        "teams": {
+            "home": {"id": HOME_ID, "name": "Home FC"},
+            "away": {"id": AWAY_ID, "name": "Away United"},
+        },
+        "goals": {"home": home_score, "away": away_score},
+        "events": events,
+    }
+
+
 def _raw_fixture(
     external_id: str,
     status_short: str,
@@ -21,21 +46,17 @@ def _raw_fixture(
     minute: int | None,
     events: list[dict[str, Any]],
 ) -> dict[str, Any]:
-    """One raw API-Football-shaped fixture wrapped in the `{response: [...]}` envelope."""
+    """A single fixture wrapped in the `{response: [...]}` envelope."""
+    return {"response": [_fixture_obj(external_id, status_short, home_score, away_score, minute, events)]}
+
+
+def build_team_fixtures(match_external_id: str) -> dict[str, Any]:
+    """A team-fixtures response (what discovery consumes): one upcoming match."""
     return {
         "response": [
-            {
-                "fixture": {
-                    "id": external_id,
-                    "status": {"short": status_short, "elapsed": minute},
-                },
-                "teams": {
-                    "home": {"id": HOME_ID, "name": "Home FC"},
-                    "away": {"id": AWAY_ID, "name": "Away United"},
-                },
-                "goals": {"home": home_score, "away": away_score},
-                "events": events,
-            }
+            _fixture_obj(
+                match_external_id, "NS", 0, 0, None, [], date="2026-08-01T14:00:00+00:00"
+            )
         ]
     }
 
@@ -105,6 +126,11 @@ class MockSportsApiClient:
 
     async def get_live_fixtures(self) -> dict[str, Any]:
         return self._timeline[self._idx][1]
+
+    async def get_team_fixtures(self, team_external_id: str, count: int) -> dict[str, Any]:
+        # Discovery over the same scripted match (as an upcoming fixture).
+        match_external_id = self._timeline[0][1]["response"][0]["fixture"]["id"]
+        return build_team_fixtures(match_external_id)
 
     async def search_teams(self, q: str) -> dict[str, Any]:  # pragma: no cover
         return {"response": []}

@@ -39,8 +39,11 @@ def normalize_fixture(raw: dict[str, Any]) -> dict[str, Any]:
         "external_id": str(fixture["id"]),
         "status": normalize_status(status.get("short")),
         "minute": status.get("elapsed"),
+        "starts_at": fixture.get("date"),  # ISO 8601 string, or None
         "home_external_id": str(teams["home"]["id"]),
         "away_external_id": str(teams["away"]["id"]),
+        "home_team_name": teams["home"].get("name"),
+        "away_team_name": teams["away"].get("name"),
         "home_score": goals.get("home") or 0,
         "away_score": goals.get("away") or 0,
         "events": [

@@ -21,6 +21,51 @@ async def find_pollable_matches() -> list[asyncpg.Record]:
     )
 
 
+async def find_match_by_external_id(external_id: str) -> asyncpg.Record | None:
+    return await db.fetchrow(
+        "SELECT * FROM matches WHERE external_id = $1", external_id
+    )
+
+
+async def upsert_match(
+    external_id: str,
+    home_team_id,
+    away_team_id,
+    status: str,
+    home_score: int,
+    away_score: int,
+    starts_at,
+    minute: int | None,
+):
+    """Insert a discovered fixture, or refresh its schedule if already known.
+
+    On conflict we deliberately do NOT touch score/minute/status — the poller
+    owns live state and runs far more often than discovery, so discovery must
+    never stomp a fresher live value with an hour-old snapshot.
+    """
+    return await db.fetchrow(
+        """
+        INSERT INTO matches
+          (external_id, home_team_id, away_team_id, status, home_score, away_score,
+           starts_at, minute)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        ON CONFLICT (external_id) DO UPDATE
+          SET home_team_id = EXCLUDED.home_team_id,
+              away_team_id = EXCLUDED.away_team_id,
+              starts_at = EXCLUDED.starts_at
+        RETURNING *
+        """,
+        external_id,
+        home_team_id,
+        away_team_id,
+        status,
+        home_score,
+        away_score,
+        starts_at,
+        minute,
+    )
+
+
 async def update_match_state(
     match_id, status: str, home_score: int, away_score: int, minute: int | None = None
 ):

@@ -80,3 +80,9 @@ class SportsApiClient:
 
     async def get_live_fixtures(self) -> dict[str, Any]:
         return await self._request("/fixtures", {"live": "all"})
+
+    async def get_team_fixtures(self, team_external_id: str, count: int) -> dict[str, Any]:
+        """Upcoming fixtures for a team (used by discovery to populate matches)."""
+        return await self._request(
+            "/fixtures", {"team": team_external_id, "next": count}
+        )

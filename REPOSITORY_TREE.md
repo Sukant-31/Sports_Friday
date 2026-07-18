@@ -62,12 +62,15 @@ sports-notification-app/
 │   │   └── workers/
 │   │       ├── diff.py             # pure fn: (prev, next) -> events[]
 │   │       ├── dedup_key.py        # deterministic key builder
-│   │       ├── poller.py           # asyncio loop; run: python -m app.workers.poller
+│   │       ├── discovery.py        # fetch fixtures for subscribed teams -> matches
+│   │       ├── poller.py           # asyncio loop (discovery + poll); python -m app.workers.poller
 │   │       ├── notifier.py         # arq WorkerSettings; run: arq app.workers.notifier.WorkerSettings
 │   │       └── web_push.py         # pywebpush send + 404/410 cleanup
 │   ├── scripts/
 │   │   ├── migrate.py              # apply migrations/ (asyncpg, forward-only)
 │   │   ├── gen_vapid.py            # print a VAPID key pair for .env
+│   │   ├── check_sports_api.py     # verify a real SPORTS_API_KEY works
+│   │   ├── demo_flow.py            # mock-data poller→notifier demo
 │   │   └── seed.py                 # optional demo teams
 │   └── tests/
 │       ├── test_diff.py            # core unit test: snapshots -> exact events

@@ -148,6 +148,15 @@ DELETE /api/push/subscribe       -> remove on unsubscribe
 
 ## 6. Background workers
 
+### Fixture discovery (`backend/app/workers/discovery.py`)
+Runs inside the poller process on a **slow** cadence (`DISCOVER_INTERVAL_SECONDS`, default 1h). Without it the `matches` table stays empty and the poller has nothing to watch — team search only fills `teams`.
+
+1. Find every team at least one user follows (`teams JOIN subscriptions`).
+2. For each, call the sports API for its upcoming fixtures (`/fixtures?team={id}&next=N`).
+3. Upsert both teams (names) and each fixture into `matches`. **On conflict it updates only schedule/team ids, never score/status/minute** — the poller owns live state and runs far more often, so discovery must not stomp a fresher value with an hour-old snapshot.
+
+Kept slow on purpose: the free API tier has a tight daily request budget, so discovery is hourly while polling is per-tick.
+
 ### Polling worker (`backend/app/workers/poller.py`)
 A standalone asyncio loop (`asyncio.sleep(POLL_INTERVAL_SECONDS)`), run as its own process:
 

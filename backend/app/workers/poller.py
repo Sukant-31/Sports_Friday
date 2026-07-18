@@ -8,6 +8,7 @@ Run standalone:  python -m app.workers.poller
 from __future__ import annotations
 
 import asyncio
+import time
 
 from arq.connections import ArqRedis
 
@@ -23,6 +24,7 @@ from app.sports_api import normalize
 from app.sports_api.client import SportsApiClient
 from app.workers.dedup_key import dedup_key
 from app.workers.diff import diff_match
+from app.workers.discovery import discover
 
 log = get_logger("poller")
 
@@ -106,9 +108,24 @@ async def run() -> None:
     await db.connect()
     client = SportsApiClient()
     queue = await get_queue()
-    log.info("poller started (interval=%ss)", settings.poll_interval_seconds)
+    log.info(
+        "poller started (poll=%ss, discover=%ss)",
+        settings.poll_interval_seconds,
+        settings.discover_interval_seconds,
+    )
+    last_discover = 0.0
     try:
         while True:
+            # Discover fixtures for subscribed teams on a slow cadence so the
+            # poller always has real matches to watch, then poll the live ones.
+            now = time.monotonic()
+            if now - last_discover >= settings.discover_interval_seconds:
+                try:
+                    await discover(client)
+                except Exception as exc:  # noqa: BLE001 - discovery must not kill the loop
+                    log.warning("discovery pass failed: %s", exc)
+                last_discover = now
+
             await tick(client, queue)
             await asyncio.sleep(settings.poll_interval_seconds)
     finally:
