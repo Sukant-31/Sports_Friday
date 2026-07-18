@@ -23,7 +23,8 @@ sports-notification-app/
 │   ├── 001_init.sql                # users, teams, subscriptions, matches, push_subscriptions
 │   ├── 002_match_events.sql        # match_events ledger (dedup)
 │   ├── 003_indexes.sql             # hot-path indexes from §4
-│   └── 004_match_minute.sql        # live match minute (dashboard)
+│   ├── 004_match_minute.sql        # live match minute (dashboard)
+│   └── 005_muted_matches.sql       # per-match mute (user_id, match_id)
 │
 ├── backend/                        # Python 3.11+ — FastAPI API + workers
 │   ├── pyproject.toml              # deps + pytest/ruff config
@@ -48,6 +49,7 @@ sports-notification-app/
 │   │   │   ├── subscriptions.py    # incl. find_push_targets_for_event
 │   │   │   ├── matches.py
 │   │   │   ├── match_events.py     # record_event_if_new (ON CONFLICT DO NOTHING)
+│   │   │   ├── muted_matches.py     # per-match mute (mute/unmute/is_muted)
 │   │   │   └── push_subscriptions.py
 │   │   ├── routers/                # FastAPI routers (§5 endpoints)
 │   │   │   ├── auth.py             # signup / login / logout

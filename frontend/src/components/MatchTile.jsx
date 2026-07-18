@@ -36,6 +36,7 @@ export default function MatchTile({ match }) {
   return (
     <Link to={`/matches/${match.id}`} className="card match-tile tile-link">
       <div className="match-head">
+        {match.muted && <span className="muted-tag" title="Muted">🔕</span>}
         <StatusBadge match={match} />
       </div>
       <div className="match-teams">

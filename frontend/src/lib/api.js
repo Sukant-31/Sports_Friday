@@ -31,6 +31,8 @@ export const api = {
 
   liveMatches: () => request('/matches/live'),
   matchDetail: (id) => request(`/matches/${id}`),
+  muteMatch: (id) => request(`/matches/${id}/mute`, { method: 'POST' }),
+  unmuteMatch: (id) => request(`/matches/${id}/mute`, { method: 'DELETE' }),
 
   vapidKey: () => request('/push/vapid-public-key'),
   registerPush: (subscription) =>

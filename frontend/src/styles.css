@@ -134,3 +134,10 @@ button.ghost { background: transparent; color: var(--green); border: 1px solid v
 .scoreboard-teams .team:last-child { text-align: left; }
 .score.big { font-size: 2.4rem; font-weight: 800; }
 .timeline-title { margin: 1.25rem 0 0.5rem; font-size: 1rem; }
+
+/* --- mute --- */
+.match-head { align-items: center; gap: 0.4rem; }
+.muted-tag { font-size: 0.9rem; }
+.mute-btn { background: transparent; color: var(--muted); border: 1px solid var(--border); border-radius: 999px; padding: 0.4rem 0.9rem; font-size: 0.85rem; }
+.mute-btn:hover:not(:disabled) { border-color: var(--green); color: var(--green); }
+.mute-btn.muted { background: #fdecea; border-color: var(--danger); color: var(--danger); }

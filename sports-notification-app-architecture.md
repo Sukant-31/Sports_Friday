@@ -140,6 +140,8 @@ DELETE /api/subscriptions/:id
 
 GET    /api/matches/live         -> live matches for teams the user follows (for dashboard)
 GET    /api/matches/:id          -> one match + full event timeline (detail view; 404 unless the user follows a team in it)
+POST   /api/matches/:id/mute     -> mute notifications for this match only
+DELETE /api/matches/:id/mute     -> unmute
 
 POST   /api/push/subscribe       { endpoint, keys: { p256dh, auth } } -> store push_subscription
 DELETE /api/push/subscribe       -> remove on unsubscribe
@@ -178,7 +180,7 @@ A standalone asyncio loop (`asyncio.sleep(POLL_INTERVAL_SECONDS)`), run as its o
 ### Notification worker (`backend/app/workers/notifier.py`)
 An arq worker (`arq app.workers.notifier.WorkerSettings`) consuming `notify_match_event` jobs:
 
-1. For the event's `team_id`, query `subscriptions` joined with `push_subscriptions` for users who want this event type (respect `notify_goals`/`notify_cards`/`notify_match_status`).
+1. For the event's `team_id`, query `subscriptions` joined with `push_subscriptions` for users who want this event type (respect `notify_goals`/`notify_cards`/`notify_match_status`), **excluding anyone who has muted this specific match** (`muted_matches`).
 2. For each push subscription, send a Web Push message using `pywebpush` and the stored VAPID keys.
 3. On a `410 Gone` or `404` response (expired subscription), delete that `push_subscriptions` row.
 4. Let arq handle retries with backoff (`max_tries`) on transient send failures. Because enqueue is gated by the `match_events` ledger, a retried job re-notifies the same event to the same users at most once per delivery attempt — acceptable — but a *new* poll tick will never duplicate it.

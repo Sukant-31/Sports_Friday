@@ -23,6 +23,7 @@ export default function MatchDetail() {
   const [data, setData] = useState(null); // { match, events } | null
   const [error, setError] = useState(null);
   const [notFound, setNotFound] = useState(false);
+  const [muting, setMuting] = useState(false);
   const timer = useRef(null);
 
   const load = useCallback(async () => {
@@ -57,6 +58,23 @@ export default function MatchDetail() {
       document.removeEventListener('visibilitychange', onVisibility);
     };
   }, [load]);
+
+  async function toggleMute() {
+    if (!data) return;
+    const currentlyMuted = data.match.muted;
+    setMuting(true);
+    // optimistic
+    setData((d) => ({ ...d, match: { ...d.match, muted: !currentlyMuted } }));
+    try {
+      if (currentlyMuted) await api.unmuteMatch(id);
+      else await api.muteMatch(id);
+    } catch (e) {
+      setError(e.message);
+      setData((d) => ({ ...d, match: { ...d.match, muted: currentlyMuted } })); // revert
+    } finally {
+      setMuting(false);
+    }
+  }
 
   if (notFound) {
     return (
@@ -103,6 +121,13 @@ export default function MatchDetail() {
           </span>
           <span className="team">{match.away_team}</span>
         </div>
+        <button
+          className={`mute-btn${match.muted ? ' muted' : ''}`}
+          onClick={toggleMute}
+          disabled={muting}
+        >
+          {match.muted ? '🔕 Muted — notifications off' : '🔔 Mute this match'}
+        </button>
       </div>
 
       <h2 className="timeline-title">Timeline</h2>

@@ -49,7 +49,9 @@ async def notify_match_event(ctx: dict, payload: dict[str, Any]) -> None:
     etype = payload["type"]
     detail = payload["detail"]
 
-    targets = await subs_repo.find_push_targets_for_event(team_id, etype)
+    targets = await subs_repo.find_push_targets_for_event(
+        team_id, etype, payload["match_id"]
+    )
     if not targets:
         return
 

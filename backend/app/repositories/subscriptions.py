@@ -76,8 +76,11 @@ async def delete_subscription(user_id, sub_id) -> bool:
     return result.endswith("1")
 
 
-async def find_push_targets_for_event(team_id, event_type: str) -> list[asyncpg.Record]:
-    """Push targets for a team event, filtered by the users' notify_* prefs.
+async def find_push_targets_for_event(
+    team_id, event_type: str, match_id
+) -> list[asyncpg.Record]:
+    """Push targets for a team event, filtered by the users' notify_* prefs and
+    excluding anyone who has muted this specific match.
 
     event_type is one of: goal | card | kickoff | full_time.
     """
@@ -92,6 +95,11 @@ async def find_push_targets_for_event(team_id, event_type: str) -> list[asyncpg.
         FROM subscriptions s
         JOIN push_subscriptions ps ON ps.user_id = s.user_id
         WHERE s.team_id = $1 AND {pref_column} = true
+          AND NOT EXISTS (
+            SELECT 1 FROM muted_matches mm
+            WHERE mm.user_id = s.user_id AND mm.match_id = $2
+          )
         """,
         team_id,
+        match_id,
     )
