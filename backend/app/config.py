@@ -30,6 +30,8 @@ class Settings(BaseSettings):
     sports_api_base_url: str = Field(
         "https://v3.football.api-sports.io", alias="SPORTS_API_BASE_URL"
     )
+    # "apisports" (direct, dashboard.api-football.com) or "rapidapi".
+    sports_api_provider: str = Field("apisports", alias="SPORTS_API_PROVIDER")
 
     vapid_public_key: str = Field("", alias="VAPID_PUBLIC_KEY")
     vapid_private_key: str = Field("", alias="VAPID_PRIVATE_KEY")

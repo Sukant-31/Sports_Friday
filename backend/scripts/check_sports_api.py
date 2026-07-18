@@ -18,6 +18,7 @@ from app.sports_api.client import SportsApiClient, SportsApiError
 
 
 async def main() -> None:
+    print(f"provider : {settings.sports_api_provider}")
     print(f"base_url : {settings.sports_api_base_url}")
     print(f"key set  : {'yes' if settings.sports_api_key else 'NO — set SPORTS_API_KEY'}")
     if not settings.sports_api_key:

@@ -25,15 +25,38 @@ class SportsApiError(Exception):
         self.status_code = status_code
 
 
+_RAPIDAPI_BASE = "https://api-football-v1.p.rapidapi.com/v3"
+
+
+def _base_and_headers() -> tuple[str, dict[str, str]]:
+    """API-Football is reachable two ways with different auth:
+      - direct (dashboard.api-football.com): x-apisports-key
+      - via RapidAPI: x-rapidapi-key + x-rapidapi-host
+    Select with SPORTS_API_PROVIDER = "apisports" (default) | "rapidapi".
+    """
+    key = settings.sports_api_key
+    if settings.sports_api_provider == "rapidapi":
+        base = settings.sports_api_base_url
+        if "api-sports.io" in base:  # user left the direct default — override
+            base = _RAPIDAPI_BASE
+        host = base.split("//", 1)[-1].split("/", 1)[0]
+        return base, {
+            "x-rapidapi-key": key,
+            "x-rapidapi-host": host,
+            "accept": "application/json",
+        }
+    return settings.sports_api_base_url, {
+        "x-apisports-key": key,
+        "accept": "application/json",
+    }
+
+
 class SportsApiClient:
     def __init__(self) -> None:
+        base_url, headers = _base_and_headers()
         self._client = httpx.AsyncClient(
-            base_url=settings.sports_api_base_url,
-            headers={
-                # API-Football style; adjust header name for another provider.
-                "x-apisports-key": settings.sports_api_key,
-                "accept": "application/json",
-            },
+            base_url=base_url,
+            headers=headers,
             timeout=10.0,
         )
         self._consecutive_failures = 0
