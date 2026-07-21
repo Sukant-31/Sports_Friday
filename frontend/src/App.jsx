@@ -17,8 +17,10 @@ function Nav() {
         <Link to="/">Dashboard</Link>
         <Link to="/search">Find teams</Link>
         <Link to="/settings">Settings</Link>
-        {user && (
+        {user ? (
           <button onClick={() => logout().then(() => navigate('/login'))}>Log out</button>
+        ) : (
+          <Link to="/login">Log in</Link>
         )}
       </div>
     </nav>

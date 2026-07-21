@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 from typing import Any
+from urllib.parse import urlsplit
 
 from pywebpush import WebPushException, webpush
 
@@ -15,8 +16,11 @@ from app.repositories import push_subscriptions as push_repo
 log = get_logger("web_push")
 
 
-def _vapid_claims() -> dict[str, str]:
-    return {"sub": settings.vapid_subject}
+def _vapid_claims(endpoint: str) -> dict[str, str]:
+    # 'aud' must be the push service's own origin (e.g. https://fcm.googleapis.com),
+    # not ours — it's derived per-endpoint, not a fixed value.
+    parts = urlsplit(endpoint)
+    return {"sub": settings.vapid_subject, "aud": f"{parts.scheme}://{parts.netloc}"}
 
 
 async def send_push(target: dict[str, Any], payload: dict[str, Any]) -> None:
@@ -45,7 +49,7 @@ async def send_push(target: dict[str, Any], payload: dict[str, Any]) -> None:
             subscription_info=subscription,
             data=json.dumps(payload),
             vapid_private_key=settings.vapid_private_key,
-            vapid_claims=_vapid_claims(),
+            vapid_claims=_vapid_claims(target["endpoint"]),
         )
     except WebPushException as exc:
         status_code = getattr(exc.response, "status_code", None)

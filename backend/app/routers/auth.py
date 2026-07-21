@@ -4,7 +4,7 @@ from fastapi import APIRouter, Request, Response, status
 
 from app.config import settings
 from app.rate_limit import limiter
-from app.schemas import Credentials, UserOut
+from app.schemas import Credentials, LoginCredentials, UserOut
 from app.security import auth_cookie_kwargs, create_token
 from app.services import auth_service
 
@@ -25,7 +25,7 @@ async def signup(request: Request, body: Credentials, response: Response) -> dic
 
 @router.post("/login")
 @limiter.limit("20/15minutes")
-async def login(request: Request, body: Credentials, response: Response) -> dict:
+async def login(request: Request, body: LoginCredentials, response: Response) -> dict:
     user = await auth_service.login(body.email, body.password)
     _set_auth_cookie(response, user["id"])
     return {"user": UserOut(**user)}
