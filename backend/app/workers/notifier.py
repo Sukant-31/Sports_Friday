@@ -44,7 +44,11 @@ def _build_notification(etype: str, detail: dict[str, Any]) -> dict[str, str]:
     return {"title": "Match update", "body": ""}
 
 
-async def notify_match_event(ctx: dict, payload: dict[str, Any]) -> None:
+async def deliver_event_notification(payload: dict[str, Any]) -> None:
+    """Core delivery: resolve subscribers for the event's team + type, send Web
+    Push. Shared by the arq worker (queued path) and the cron poll endpoint
+    (direct-call path, used where there's no persistent arq worker to consume
+    a queue — e.g. Vercel serverless)."""
     team_id = payload["team_id"]
     etype = payload["type"]
     detail = payload["detail"]
@@ -63,11 +67,15 @@ async def notify_match_event(ctx: dict, payload: dict[str, Any]) -> None:
     )
     failures = [r for r in results if isinstance(r, Exception)]
     if failures:
-        # Raise so arq retries with backoff (dedup ledger prevents re-emitting on
-        # a later poll, so retries can't create distinct notifications).
         log.warning("%d push(es) failed for %s", len(failures), etype)
         raise failures[0]
     log.info("sent %d notifications for %s", len(targets), etype)
+
+
+async def notify_match_event(ctx: dict, payload: dict[str, Any]) -> None:
+    # Raise so arq retries with backoff (dedup ledger prevents re-emitting on a
+    # later poll, so retries can't create distinct notifications).
+    await deliver_event_notification(payload)
 
 
 async def _startup(ctx: dict) -> None:

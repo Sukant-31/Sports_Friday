@@ -67,7 +67,12 @@ sports-notification-app/
 │   │       ├── discovery.py        # fetch fixtures for subscribed teams -> matches
 │   │       ├── poller.py           # asyncio loop (discovery + poll); python -m app.workers.poller
 │   │       ├── notifier.py         # arq WorkerSettings; run: arq app.workers.notifier.WorkerSettings
+│   │       ├── cron_poll.py        # one-shot discovery+poll+notify for serverless (Vercel Cron)
 │   │       └── web_push.py         # pywebpush send + 404/410 cleanup
+│   ├── api/
+│   │   └── index.py                # Vercel Python entrypoint: `from app.main import app`
+│   ├── vercel.json                 # serverless deploy config + /api/cron/poll cron
+│   ├── requirements.txt            # pip deps for Vercel's Python builder
 │   ├── scripts/
 │   │   ├── migrate.py              # apply migrations/ (asyncpg, forward-only)
 │   │   ├── gen_vapid.py            # print a VAPID key pair for .env

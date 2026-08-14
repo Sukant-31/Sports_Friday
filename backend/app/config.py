@@ -49,6 +49,10 @@ class Settings(BaseSettings):
     # How many upcoming fixtures to pull per team on each discovery pass.
     fixtures_lookahead: int = Field(10, alias="FIXTURES_LOOKAHEAD")
     cors_origin: str = Field("http://localhost:5173", alias="CORS_ORIGIN")
+    # Shared secret Vercel Cron sends as "Authorization: Bearer <value>" so
+    # /api/cron/poll can't be triggered by anyone else. Vercel sets this
+    # automatically from the CRON_SECRET env var on Cron-triggered requests.
+    cron_secret: str = Field("", alias="CRON_SECRET")
 
     @property
     def is_prod(self) -> bool:

@@ -23,12 +23,13 @@ from app.workers.poller import poll_match
 
 
 class CapturingQueue:
-    """Stand-in for the arq queue that records enqueued payloads."""
+    """Stand-in `notify` callable that records delivered payloads instead of
+    enqueueing/sending them."""
 
     def __init__(self) -> None:
         self.jobs: list[dict] = []
 
-    async def enqueue_job(self, name: str, payload: dict) -> None:
+    async def __call__(self, payload: dict) -> None:
         self.jobs.append(payload)
 
 

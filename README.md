@@ -84,6 +84,28 @@ It prints upcoming/live fixtures for the followed teams and creates a demo
 login (`demo@local` / `demo1234`) you can use on the dashboard. When a followed
 match is live, goal/card/kickoff/full-time events print as `PUSH → …` lines.
 
+## Deploying free on Vercel (backend + frontend)
+
+Both `backend/` and `frontend/` are separate Vercel projects.
+
+1. **Data stores**: create a free [Neon](https://neon.tech) Postgres (use the
+   pooled connection string) and a free [Upstash](https://upstash.com) Redis
+   (TCP connection string, not REST).
+2. **Backend**: `vercel` (or link via dashboard) inside `backend/`. Set env
+   vars from `.env.example` (`DATABASE_URL`, `REDIS_URL`, `JWT_SECRET`,
+   `VAPID_*`, `SPORTS_API_KEY`, `CORS_ORIGIN` = your frontend URL, `ENV=production`,
+   and a random `CRON_SECRET`).
+3. **Frontend**: update the `destination` in `frontend/vercel.json`'s rewrite
+   to your backend's Vercel URL, then `vercel` inside `frontend/`.
+
+**Tradeoff**: Vercel has no always-on process, so there's no continuously
+running poller/notifier here — `/api/cron/poll` runs one discovery+poll+notify
+pass, triggered by Vercel Cron. Free (Hobby) plan crons run **once a day**, so
+live goal/card notifications become a once-daily state check instead of
+near-real-time. For real-time push, run the standalone poller/notifier (see
+"Getting started" above) on a host with a persistent process, e.g. via
+`deploy/render.yaml`.
+
 ## Notes
 
 - Web Push needs HTTPS in production; `localhost` is exempt for dev.

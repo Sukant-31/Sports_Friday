@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
@@ -17,6 +17,7 @@ from app.rate_limit import limiter
 from app.redis_client import close_redis
 from app.routers import auth, matches, push, subscriptions, teams
 from app.sports_api.client import SportsApiClient
+from app.workers.cron_poll import run_once
 
 log = get_logger("api")
 
@@ -50,6 +51,15 @@ def create_app() -> FastAPI:
     @app.get("/health")
     async def health() -> dict:
         return {"ok": True}
+
+    @app.get("/api/cron/poll")
+    async def cron_poll(authorization: str | None = Header(default=None)) -> dict:
+        """Hit by Vercel Cron (or manually) to run one discovery+poll pass and
+        deliver any new notifications inline — see app/workers/cron_poll.py
+        for why this replaces the standalone poller+notifier on serverless."""
+        if settings.cron_secret and authorization != f"Bearer {settings.cron_secret}":
+            raise HTTPException(status_code=401, detail="unauthorized")
+        return await run_once()
 
     app.include_router(auth.router)
     app.include_router(teams.router)

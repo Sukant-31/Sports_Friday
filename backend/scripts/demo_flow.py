@@ -21,7 +21,7 @@ from arq.worker import Worker
 
 from app import db
 from app.config import settings
-from app.queue import get_queue, redis_settings
+from app.queue import enqueue_match_event, get_queue, redis_settings
 from app.redis_client import close_redis, redis
 from app.repositories import push_subscriptions as push_repo
 from app.repositories import subscriptions as subs_repo
@@ -73,10 +73,13 @@ async def main() -> None:
     client = MockSportsApiClient(build_timeline(match["external_id"]))
     queue = await get_queue()
 
+    async def notify(payload: dict) -> None:
+        await enqueue_match_event(queue, payload)
+
     print(f"\n{BANNER}\n POLLER — feeding {len(client.labels())} mock snapshots\n{BANNER}")
     while True:
         before = await _queued_count(queue)
-        await poll_match(client, queue, match)
+        await poll_match(client, notify, match)
         after = await _queued_count(queue)
         enqueued = after - before
         print(f"  [{client.label}]  → {enqueued} event(s) enqueued")

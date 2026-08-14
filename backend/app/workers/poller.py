@@ -9,8 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import time
-
-from arq.connections import ArqRedis
+from typing import Any, Awaitable, Callable
 
 from app import db
 from app.config import settings
@@ -28,8 +27,10 @@ from app.workers.discovery import discover
 
 log = get_logger("poller")
 
+Notify = Callable[[dict[str, Any]], Awaitable[None]]
 
-async def poll_match(client: SportsApiClient, queue: ArqRedis, match) -> None:
+
+async def poll_match(client: SportsApiClient, notify: Notify, match) -> None:
     raw = await client.get_live_fixture(match["external_id"])
     fixtures = normalize.normalize_fixtures(raw)
     if not fixtures:
@@ -61,17 +62,16 @@ async def poll_match(client: SportsApiClient, queue: ArqRedis, match) -> None:
             )
             if recorded is None:
                 continue  # already handled — no duplicate notification
-            await enqueue_match_event(
-                queue,
+            await notify(
                 {
                     "match_event_id": str(recorded["id"]),
                     "match_id": str(match["id"]),
                     "team_id": str(team["id"]),
                     "type": event["type"],
                     "detail": event,
-                },
+                }
             )
-            log.info("event enqueued: %s for team %s", event["type"], ext_id)
+            log.info("event notified: %s for team %s", event["type"], ext_id)
 
     next_state = {
         "status": fixture["status"],
@@ -91,7 +91,7 @@ async def poll_match(client: SportsApiClient, queue: ArqRedis, match) -> None:
     )
 
 
-async def tick(client: SportsApiClient, queue: ArqRedis) -> None:
+async def tick(client: SportsApiClient, notify: Notify) -> None:
     matches = await matches_repo.find_pollable_matches()
     if not matches:
         log.debug("no subscribed matches to poll")
@@ -99,15 +99,21 @@ async def tick(client: SportsApiClient, queue: ArqRedis) -> None:
     log.debug("polling %d matches", len(matches))
     for match in matches:
         try:
-            await poll_match(client, queue, match)
+            await poll_match(client, notify, match)
         except Exception as exc:  # noqa: BLE001 - one bad match shouldn't kill the tick
             log.warning("poll failed for match %s: %s", match["id"], exc)
 
 
 async def run() -> None:
+    """Standalone long-running poller (docker/local/Render). Enqueues events
+    onto the arq queue for a separate notifier worker to consume."""
     await db.connect()
     client = SportsApiClient()
     queue = await get_queue()
+
+    async def notify(payload: dict) -> None:
+        await enqueue_match_event(queue, payload)
+
     log.info(
         "poller started (poll=%ss, discover=%ss)",
         settings.poll_interval_seconds,
@@ -126,7 +132,7 @@ async def run() -> None:
                     log.warning("discovery pass failed: %s", exc)
                 last_discover = now
 
-            await tick(client, queue)
+            await tick(client, notify)
             await asyncio.sleep(settings.poll_interval_seconds)
     finally:
         await client.aclose()
