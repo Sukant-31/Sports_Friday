@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { api } from '../lib/api.js';
+import { useAuth } from '../lib/auth.jsx';
 import { enablePushNotifications } from '../registerSW.js';
 import MatchTile from '../components/MatchTile.jsx';
 
@@ -14,6 +16,7 @@ function relTime(ts) {
 }
 
 export default function Dashboard() {
+  const { user } = useAuth();
   const [matches, setMatches] = useState(null); // null = initial loading
   const [error, setError] = useState(null);
   const [pushMsg, setPushMsg] = useState(null);
@@ -37,6 +40,7 @@ export default function Dashboard() {
   }, []);
 
   useEffect(() => {
+    if (!user) return;
     const start = () => {
       stop();
       timer.current = setInterval(load, POLL_MS);
@@ -60,7 +64,7 @@ export default function Dashboard() {
       document.removeEventListener('visibilitychange', onVisibility);
       clearInterval(relTimer);
     };
-  }, [load]);
+  }, [load, user]);
 
   async function onEnablePush() {
     try {
@@ -69,6 +73,20 @@ export default function Dashboard() {
     } catch (err) {
       setPushMsg(err.message);
     }
+  }
+
+  if (!user) {
+    return (
+      <section>
+        <h1>Live matches</h1>
+        <div className="card empty">
+          <p>Log in to see live matches for the teams you follow.</p>
+          <p className="muted">
+            <Link to="/login">Log in</Link> or <Link to="/signup">create an account</Link>.
+          </p>
+        </div>
+      </section>
+    );
   }
 
   return (
