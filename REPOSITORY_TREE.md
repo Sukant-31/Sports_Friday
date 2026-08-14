@@ -108,11 +108,11 @@ sports-notification-app/
 │           ├── MatchTile.jsx       # score + status badge + score-flash
 │           ├── EventFeed.jsx       # recent goals/cards/kickoff/full-time
 │           └── NotificationToggle.jsx
+│       └── vercel.json             # frontend deploy config (SPA + /api rewrite)
 │
 └── deploy/
     ├── Dockerfile.backend          # one image; CMD chooses api | poller | notifier
-    ├── render.yaml                 # api + poller + notifier + Postgres + Redis
-    └── vercel.json                 # frontend deploy config
+    └── render.yaml                 # api + poller + notifier + Postgres + Redis
 ```
 
 ## Mapping to the architecture doc

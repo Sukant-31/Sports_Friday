@@ -24,9 +24,9 @@ layout of this repo.
 | Path | What it is |
 |---|---|
 | `backend/` | FastAPI API + poller + notifier (one codebase, three processes) |
-| `frontend/` | React + Vite PWA |
+| `frontend/` | React + Vite PWA (includes `vercel.json` deploy config) |
 | `migrations/` | plain, forward-only SQL |
-| `deploy/` | Dockerfile + Render/Vercel configs |
+| `deploy/` | Dockerfile + Render config |
 
 ## Prerequisites
 
