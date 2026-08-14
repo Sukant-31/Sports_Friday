@@ -1,12 +1,22 @@
-import { createContext, useContext, useState, useCallback } from 'react';
+import { createContext, useContext, useState, useCallback, useEffect } from 'react';
 import { api } from './api.js';
 
 const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
-  // We don't have a /me endpoint in v1; treat presence of a prior login in
-  // this tab as the signal. A real app would add GET /api/auth/me.
   const [user, setUser] = useState(null);
+  // True until the initial GET /auth/me resolves, so callers can avoid
+  // flashing a "log in" prompt while a valid session cookie is still being
+  // checked (e.g. after a page refresh).
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    api
+      .me()
+      .then(({ user }) => setUser(user))
+      .catch(() => setUser(null))
+      .finally(() => setLoading(false));
+  }, []);
 
   const login = useCallback(async (email, password) => {
     const { user } = await api.login(email, password);
@@ -26,7 +36,7 @@ export function AuthProvider({ children }) {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, login, signup, logout }}>
+    <AuthContext.Provider value={{ user, loading, login, signup, logout }}>
       {children}
     </AuthContext.Provider>
   );

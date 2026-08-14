@@ -21,6 +21,7 @@ export const api = {
   signup: (email, password) => request('/auth/signup', { method: 'POST', body: { email, password } }),
   login: (email, password) => request('/auth/login', { method: 'POST', body: { email, password } }),
   logout: () => request('/auth/logout', { method: 'POST' }),
+  me: () => request('/auth/me'),
 
   searchTeams: (q) => request(`/teams/search?q=${encodeURIComponent(q)}`),
 

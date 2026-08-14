@@ -16,7 +16,7 @@ function relTime(ts) {
 }
 
 export default function Dashboard() {
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const [matches, setMatches] = useState(null); // null = initial loading
   const [error, setError] = useState(null);
   const [pushMsg, setPushMsg] = useState(null);
@@ -73,6 +73,19 @@ export default function Dashboard() {
     } catch (err) {
       setPushMsg(err.message);
     }
+  }
+
+  if (authLoading) {
+    return (
+      <section>
+        <h1>Live matches</h1>
+        <div className="grid">
+          {[0, 1, 2].map((i) => (
+            <div key={i} className="card skeleton" />
+          ))}
+        </div>
+      </section>
+    );
   }
 
   if (!user) {
