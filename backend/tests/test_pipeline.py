@@ -123,3 +123,64 @@ async def test_notifier_sends_for_subscribed_team(fixtures, monkeypatch):
     assert any("Full-time" in t for t in titles)
     # Away-team lifecycle jobs resolve to no push target, so nothing extra fires.
     assert all(e.startswith("https://push.example/") for e, _ in sent)
+
+
+async def test_failed_delivery_retried_after_match_finishes(fixtures, monkeypatch):
+    from app.repositories import match_events as events_repo
+    from app.workers.poller import tick
+
+    match = fixtures["match"]
+    queue = CapturingQueue()
+    client = MockSportsApiClient(build_timeline(match["external_id"]))
+    while True:
+        await poll_match(client, queue, match)
+        if not client.advance():
+            break
+
+    goal = next(j for j in queue.jobs if j["type"] == "goal")
+    async def fail(target, payload):
+        raise RuntimeError("push temporarily unavailable")
+    monkeypatch.setattr(notifier_mod, "send_push", fail)
+    with pytest.raises(RuntimeError):
+        await notifier_mod.deliver_event_notification(goal)
+    assert any(str(e["id"]) == goal["match_event_id"] for e in await events_repo.pending_events())
+
+    sent = []
+    async def succeed(target, payload):
+        sent.append(payload)
+    monkeypatch.setattr(notifier_mod, "send_push", succeed)
+    await tick(client, notifier_mod.deliver_event_notification)
+    assert any(p["tag"] == goal["match_event_id"] for p in sent)
+    count = len(sent)
+    await notifier_mod.deliver_event_notification(goal)
+    assert len(sent) == count
+
+
+async def test_partial_failure_does_not_resend_successful_recipient(fixtures, monkeypatch):
+    match = fixtures["match"]
+    second_endpoint = f"https://push.example/second-{uuid.uuid4()}"
+    await push_repo.upsert_push_subscription(
+        fixtures["user"]["id"], second_endpoint, "p256dh", "auth"
+    )
+    queue = CapturingQueue()
+    client = MockSportsApiClient(build_timeline(match["external_id"]))
+    await poll_match(client, queue, match)
+    client.advance()
+    await poll_match(client, queue, match)
+    job = next(j for j in queue.jobs if j["team_id"] == str(match["home_team_id"]))
+    successes = []
+    broken = True
+
+    async def send(target, payload):
+        if target["endpoint"] == second_endpoint and broken:
+            raise RuntimeError("one device unavailable")
+        successes.append(target["endpoint"])
+
+    monkeypatch.setattr(notifier_mod, "send_push", send)
+    with pytest.raises(RuntimeError):
+        await notifier_mod.deliver_event_notification(job)
+    assert len(successes) == 1
+    broken = False
+    await notifier_mod.deliver_event_notification(job)
+    assert len(successes) == 2
+    assert len(set(successes)) == 2

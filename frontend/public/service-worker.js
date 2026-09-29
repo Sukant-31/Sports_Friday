@@ -6,6 +6,7 @@ self.addEventListener('push', (event) => {
   event.waitUntil(
     self.registration.showNotification(data.title ?? 'Match update', {
       body: data.body ?? '',
+      tag: data.tag,
       icon: data.icon ?? '/icon.png',
       badge: '/icon.png',
     }),

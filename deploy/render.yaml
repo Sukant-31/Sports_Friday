@@ -36,6 +36,8 @@ services:
     dockerContext: .
     dockerCommand: python -m app.workers.poller
     envVars:
+      - key: JWT_SECRET
+        generateValue: true
       - key: ENV
         value: production
       - key: DATABASE_URL
@@ -52,6 +54,8 @@ services:
     dockerContext: .
     dockerCommand: arq app.workers.notifier.WorkerSettings
     envVars:
+      - key: JWT_SECRET
+        generateValue: true
       - key: ENV
         value: production
       - key: DATABASE_URL

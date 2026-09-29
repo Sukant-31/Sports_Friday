@@ -20,5 +20,7 @@ async def get_queue() -> ArqRedis:
 
 
 async def enqueue_match_event(queue: ArqRedis, payload: dict[str, Any]) -> None:
-    # Retries/backoff are configured on the worker function (see notifier.py).
-    await queue.enqueue_job("notify_match_event", payload)
+    # Only one queued/running job per event; pending failures can be re-enqueued.
+    await queue.enqueue_job(
+        "notify_match_event", payload, _job_id=payload["match_event_id"]
+    )

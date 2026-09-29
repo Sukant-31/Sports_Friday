@@ -3,6 +3,7 @@ row is pruned and the call resolves; other failures raise so arq retries."""
 
 from __future__ import annotations
 
+import asyncio
 import json
 from typing import Any
 from urllib.parse import urlsplit
@@ -43,11 +44,12 @@ async def send_push(target: dict[str, Any], payload: dict[str, Any]) -> None:
         "keys": {"p256dh": target["p256dh"], "auth": target["auth"]},
     }
     try:
-        # pywebpush is sync; it's a short network call. For high volume, offload
-        # to a thread pool (asyncio.to_thread) — fine as-is for v1.
-        webpush(
+        # Keep synchronous network I/O off the worker event loop.
+        await asyncio.to_thread(
+            webpush,
             subscription_info=subscription,
             data=json.dumps(payload),
+            timeout=10,
             vapid_private_key=settings.vapid_private_key,
             vapid_claims=_vapid_claims(target["endpoint"]),
         )

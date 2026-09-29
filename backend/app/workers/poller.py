@@ -95,13 +95,24 @@ async def tick(client: SportsApiClient, notify: Notify) -> None:
     matches = await matches_repo.find_pollable_matches()
     if not matches:
         log.debug("no subscribed matches to poll")
-        return
     log.debug("polling %d matches", len(matches))
     for match in matches:
         try:
             await poll_match(client, notify, match)
         except Exception as exc:  # noqa: BLE001 - one bad match shouldn't kill the tick
             log.warning("poll failed for match %s: %s", match["id"], exc)
+
+    # Retry durable pending events even after a match has finished, or enqueue failed.
+    for event in await events_repo.pending_events():
+        try:
+            await notify({
+                "match_event_id": str(event["id"]),
+                "match_id": str(event["match_id"]),
+                "team_id": str(event["team_id"]),
+                "type": event["type"], "detail": event["detail"],
+            })
+        except Exception as exc:
+            log.warning("pending notification failed for %s: %s", event["id"], exc)
 
 
 async def run() -> None:

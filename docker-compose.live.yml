@@ -1,0 +1,45 @@
+# Run with: docker compose -f docker-compose.yml -f docker-compose.live.yml up -d --build
+x-app: &app
+  build:
+    context: .
+    dockerfile: deploy/Dockerfile.backend
+  env_file: .env
+  environment:
+    ENV: development
+    DATABASE_URL: postgresql://sports:sports@postgres:5432/sports
+    REDIS_URL: redis://redis:6379
+  restart: unless-stopped
+
+services:
+  migrate:
+    <<: *app
+    command: python scripts/migrate.py
+    restart: "no"
+    depends_on:
+      postgres:
+        condition: service_healthy
+  api:
+    <<: *app
+    ports:
+      - "8000:8000"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+  poller:
+    <<: *app
+    command: python -m app.workers.poller
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+  notifier:
+    <<: *app
+    command: arq app.workers.notifier.WorkerSettings
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy

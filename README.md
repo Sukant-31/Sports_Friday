@@ -112,3 +112,35 @@ near-real-time. For real-time push, run the standalone poller/notifier (see
 - Only matches with at least one subscriber are polled (architecture doc, §10).
 - Notifications are de-duplicated via the `match_events` ledger, so a restart
   never re-sends an old goal alert.
+
+## Running live notifications continuously
+
+The daily Vercel cron is a fallback, not a live notification service. Keep the
+frontend/API on Vercel if desired, but run both worker commands on an always-on
+host with the **same database and Redis** as the API. Set `DATABASE_URL`,
+`REDIS_URL`, `JWT_SECRET`, `SPORTS_API_KEY`, and `VAPID_*` on the workers;
+use `PUSH_TRANSPORT=webpush`. Apply migrations before starting updated services.
+The poller checks every 20 seconds by default; sports-provider request quotas
+must accommodate the number of followed fixtures being polled.
+
+For a complete local backend (database, Redis, migrations, API, and both workers),
+configure `.env` as above, then run:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.live.yml up -d --build
+```
+
+Run the frontend with `cd frontend && npm run dev`. In the dashboard, choose
+**Enable notifications** and allow browser permission. Follow a team and check
+its Goals, Cards, and Kickoff / full-time settings. New follows enable all three;
+existing preferences are preserved, so enable Cards manually for older follows.
+Muted matches do not send alerts. The live-test script uses console delivery;
+its `PUSH →` messages are not browser notifications.
+
+Migration `006_notification_delivery.sql` adds durable pending notifications.
+Unsuccessful deliveries are retried on subsequent poll passes, including for
+finished matches. Successful recipients are remembered across partial failures.
+Previously recorded events are treated as historical during migration and are
+not replayed. Delivery is at-least-once: a crash after the push service accepts a
+message but before its receipt commits can cause a repeat; stable notification
+tags help the browser replace repeated alerts.

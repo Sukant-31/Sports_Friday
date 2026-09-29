@@ -15,17 +15,19 @@ export async function enablePushNotifications() {
     throw new Error('Push notifications are not supported in this browser');
   }
 
-  const registration = await navigator.serviceWorker.register('/service-worker.js', {
-    type: 'module',
-  });
-
   const permission = await Notification.requestPermission();
   if (permission !== 'granted') {
     throw new Error('Notification permission denied');
   }
 
+  await navigator.serviceWorker.register('/service-worker.js', {
+    type: 'module',
+  });
+
+  const registration = await navigator.serviceWorker.ready;
   const { key } = await api.vapidKey();
-  const subscription = await registration.pushManager.subscribe({
+  if (!key) throw new Error('Push notifications are not configured on the server');
+  const subscription = await registration.pushManager.getSubscription() || await registration.pushManager.subscribe({
     userVisibleOnly: true,
     applicationServerKey: urlBase64ToUint8Array(key),
   });

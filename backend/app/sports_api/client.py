@@ -76,7 +76,10 @@ class SportsApiClient:
                     raise SportsApiError(f"Upstream {resp.status_code}", resp.status_code)
                 resp.raise_for_status()
                 self._consecutive_failures = 0
-                return resp.json()
+                data = resp.json()
+                if data.get("errors"):
+                    raise SportsApiError(f"Sports API rejected request: {data['errors']}")
+                return data
             except (SportsApiError, httpx.HTTPError) as exc:
                 status_code = getattr(exc, "status_code", 0)
                 retriable = status_code == 429 or status_code >= 500

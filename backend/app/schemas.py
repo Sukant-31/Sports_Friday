@@ -45,7 +45,7 @@ class _CamelModel(BaseModel):
 class SubscriptionCreate(_CamelModel):
     team_id: UUID
     notify_goals: bool = True
-    notify_cards: bool = False
+    notify_cards: bool = True
     notify_match_status: bool = True
 
 
