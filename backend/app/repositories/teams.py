@@ -28,8 +28,16 @@ async def search_teams_cached(q: str) -> list[asyncpg.Record]:
     query = normalize_query(q)
     if len(query) < 2:
         return []
-    return await db.fetch(
-        """
+    args = (
+        query,
+        f"%{query}%",
+        query.split(),
+        f"%{max(query.split(), key=len)}%",
+        r"\m" + r"\w*\M.*\m".join(query.split()),
+    )
+    try:
+        return await db.fetch(
+            """
         SELECT id, external_id, name, league
         FROM teams
         WHERE lower(name) LIKE $2
@@ -47,12 +55,33 @@ async def search_teams_cached(q: str) -> list[asyncpg.Record]:
             word_similarity($1, lower(name)) DESC, lower(name), id
         LIMIT 250
         """,
-        query,
-        f"%{query}%",
-        query.split(),
-        f"%{max(query.split(), key=len)}%",
-        r"\m" + r"\w*\M.*\m".join(query.split()),
-    )
+            *args,
+        )
+    except asyncpg.UndefinedFunctionError:
+        # Older databases may not yet have migration 007's pg_trgm extension.
+        # Keep normal search available and let Python rank fuzzy candidates.
+        return await db.fetch(
+            """
+            SELECT id, external_id, name, league
+            FROM teams
+            WHERE lower(name) LIKE $2
+               OR lower(name) LIKE $4
+               OR EXISTS (
+                   SELECT 1 FROM unnest($3::text[]) AS token
+                   WHERE length(token) >= 3
+                     AND lower(name) LIKE '%' || left(token, 2) || '%'
+               )
+            ORDER BY CASE
+                WHEN lower(name) = $1 THEN 0
+                WHEN lower(name) LIKE $1 || '%' THEN 1
+                WHEN lower(name) ~ $5 THEN 2
+                WHEN lower(name) LIKE $2 THEN 3
+                ELSE 4 END,
+                lower(name), id
+            LIMIT 250
+            """,
+            *args,
+        )
 
 
 async def find_team_by_id(team_id) -> asyncpg.Record | None:

@@ -113,3 +113,69 @@ async def test_rich_cache_avoids_provider(monkeypatch):
 def test_multiword_typo_requires_each_word():
     assert [t['name'] for t in rank_teams(teams(), 'manchster unuted')] == ['Manchester United']
     assert rank_teams(teams(), 'Manchester banana') == []
+
+
+async def test_missing_trigram_extension_falls_back_to_standard_sql(monkeypatch):
+    import asyncpg
+    from app.repositories import teams as repo
+
+    fetch = AsyncMock(side_effect=[asyncpg.UndefinedFunctionError('operator does not exist'), teams()])
+    monkeypatch.setattr(repo.db, 'fetch', fetch)
+    found = await repo.search_teams_cached('Manchster')
+    assert [t['name'] for t in rank_teams(found, 'Manchster')] == [
+        'Manchester City', 'Manchester United', 'FC United of Manchester',
+    ]
+    assert fetch.await_count == 2
+    assert 'word_similarity' not in fetch.await_args.args[0]
+
+
+async def test_other_database_errors_are_not_hidden(monkeypatch):
+    import asyncpg
+    from app.repositories import teams as repo
+
+    fetch = AsyncMock(side_effect=asyncpg.UndefinedTableError('teams missing'))
+    monkeypatch.setattr(repo.db, 'fetch', fetch)
+    with pytest.raises(asyncpg.UndefinedTableError):
+        await repo.search_teams_cached('Manchester')
+    assert fetch.await_count == 1
+
+
+async def test_authenticated_search_without_trigram_extension(monkeypatch):
+    """Reproduce production's missing operators through the real HTTP route."""
+    import uuid
+    import asyncpg
+    import httpx
+    from app.config import settings
+    from app.deps import get_current_user_id
+    from app.main import create_app
+    from app.repositories import teams as repo
+
+    connection = await asyncpg.connect(settings.database_url, timeout=3)
+    try:
+        await connection.execute('''CREATE TEMP TABLE teams (
+            id uuid, external_id text, name text, league text)''')
+        await connection.executemany(
+            'INSERT INTO teams (id, external_id, name) VALUES ($1,$2,$3)',
+            [(uuid.uuid4(), t['external_id'], t['name']) for t in teams()],
+        )
+        # Hide extensions in public without changing or dropping them.
+        await connection.execute('SET search_path TO pg_temp')
+        fetch = AsyncMock(wraps=connection.fetch)
+        monkeypatch.setattr(repo.db, 'fetch', fetch)
+        app = create_app()
+        app.dependency_overrides[get_current_user_id] = lambda: uuid.uuid4()
+        app.state.sports_client = SimpleNamespace(search_teams=AsyncMock(
+            return_value={'response': []},
+        ))
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app),
+                                     base_url='http://test') as client:
+            for query in ('Manchester', 'man uni', 'Manchster'):
+                response = await client.get('/api/teams/search', params={'q': query})
+                assert response.status_code == 200
+                assert any(t['name'] == 'Manchester United' for t in response.json()['teams'])
+            response = await client.get('/api/teams/search', params={'q': 'zzzzzz'})
+            assert response.status_code == 200
+            assert response.json()['teams'] == []
+        assert fetch.await_count == 8  # Missing extension, then successful fallback each time.
+    finally:
+        await connection.close()
