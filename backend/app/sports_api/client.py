@@ -66,6 +66,8 @@ class SportsApiClient:
         await self._client.aclose()
 
     async def _request(self, path: str, params: dict[str, Any]) -> dict[str, Any]:
+        if not settings.sports_api_key:
+            raise SportsApiError("Live sports data is not configured: SPORTS_API_KEY is missing")
         if time.monotonic() < self._breaker_open_until:
             raise SportsApiError("Circuit breaker open", 503)
 
@@ -75,10 +77,10 @@ class SportsApiClient:
                 if resp.status_code == 429 or resp.status_code >= 500:
                     raise SportsApiError(f"Upstream {resp.status_code}", resp.status_code)
                 resp.raise_for_status()
-                self._consecutive_failures = 0
                 data = resp.json()
                 if data.get("errors"):
                     raise SportsApiError(f"Sports API rejected request: {data['errors']}")
+                self._consecutive_failures = 0
                 return data
             except (SportsApiError, httpx.HTTPError) as exc:
                 status_code = getattr(exc, "status_code", 0)
@@ -101,11 +103,17 @@ class SportsApiClient:
     async def search_teams(self, q: str) -> dict[str, Any]:
         return await self._request("/teams", {"search": q})
 
+    async def get_team(self, external_id: str) -> dict[str, Any]:
+        return await self._request("/teams", {"id": external_id})
+
     async def get_live_fixture(self, external_id: str) -> dict[str, Any]:
         return await self._request("/fixtures", {"id": external_id})
 
     async def get_live_fixtures(self) -> dict[str, Any]:
         return await self._request("/fixtures", {"live": "all"})
+
+    async def get_team_live_fixtures(self, team_external_id: str) -> dict[str, Any]:
+        return await self._request("/fixtures", {"team": team_external_id, "live": "all"})
 
     async def get_team_fixtures(self, team_external_id: str, count: int) -> dict[str, Any]:
         """Upcoming fixtures for a team (used by discovery to populate matches)."""

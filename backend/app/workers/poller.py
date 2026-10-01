@@ -18,7 +18,6 @@ from app.queue import enqueue_match_event, get_queue
 from app.redis_client import close_redis, get_match_state, set_match_state
 from app.repositories import match_events as events_repo
 from app.repositories import matches as matches_repo
-from app.repositories import teams as teams_repo
 from app.sports_api import normalize
 from app.sports_api.client import SportsApiClient
 from app.workers.dedup_key import dedup_key
@@ -36,6 +35,10 @@ async def poll_match(client: SportsApiClient, notify: Notify, match) -> None:
     if not fixtures:
         return
     fixture = fixtures[0]
+    team_ids = {
+        fixture["home_external_id"]: match["home_team_id"],
+        fixture["away_external_id"]: match["away_team_id"],
+    }
 
     # Baseline: Redis cache, else rehydrate from the persisted row so a cache
     # miss doesn't replay history as new events.
@@ -55,10 +58,13 @@ async def poll_match(client: SportsApiClient, notify: Notify, match) -> None:
             else [fixture["home_external_id"], fixture["away_external_id"]]
         )
         for ext_id in team_ext_ids:
-            team = await teams_repo.upsert_team(external_id=ext_id, name=ext_id)
+            team_id = team_ids.get(ext_id)
+            if team_id is None:
+                log.warning("event references unknown team %s in match %s", ext_id, match["id"])
+                continue
             key = f"{dedup_key(fixture['external_id'], event)}:t{ext_id}"
             recorded = await events_repo.record_event_if_new(
-                match["id"], team["id"], event["type"], event, key
+                match["id"], team_id, event["type"], event, key
             )
             if recorded is None:
                 continue  # already handled — no duplicate notification
@@ -66,7 +72,7 @@ async def poll_match(client: SportsApiClient, notify: Notify, match) -> None:
                 {
                     "match_event_id": str(recorded["id"]),
                     "match_id": str(match["id"]),
-                    "team_id": str(team["id"]),
+                    "team_id": str(team_id),
                     "type": event["type"],
                     "detail": event,
                 }

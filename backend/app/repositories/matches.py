@@ -6,13 +6,25 @@ from app import db
 
 
 async def find_pollable_matches() -> list[asyncpg.Record]:
-    """Matches worth polling: not finished AND followed by >= 1 user."""
+    """Poll live matches and fixtures near kickoff, never distant schedules."""
     return await db.fetch(
         """
         SELECT DISTINCT m.id, m.external_id, m.status, m.home_score, m.away_score,
                m.home_team_id, m.away_team_id, m.starts_at, m.last_polled_at
         FROM matches m
-        WHERE m.status IN ('scheduled', 'live')
+        WHERE (
+            m.status = 'live'
+            OR (
+                m.status = 'scheduled'
+                AND m.starts_at BETWEEN now() - INTERVAL '6 hours'
+                                    AND now() + INTERVAL '15 minutes'
+            )
+            OR (
+                m.status = 'scheduled' AND m.starts_at IS NULL
+                AND (m.last_polled_at IS NULL
+                     OR m.last_polled_at < now() - INTERVAL '1 hour')
+            )
+          )
           AND (
             EXISTS (SELECT 1 FROM subscriptions s WHERE s.team_id = m.home_team_id)
             OR EXISTS (SELECT 1 FROM subscriptions s WHERE s.team_id = m.away_team_id)
@@ -86,15 +98,24 @@ async def update_match_state(
 
 
 async def find_live_matches_for_user(user_id) -> list[asyncpg.Record]:
+    """Followed fixtures, including matches finished within the last 24 hours."""
     return await db.fetch(
         """
         SELECT DISTINCT m.id, m.external_id, m.status, m.home_score, m.away_score,
-               m.minute, ht.name AS home_team, at.name AS away_team, m.starts_at
+               m.minute, ht.name AS home_team, at.name AS away_team, m.starts_at,
+               m.last_polled_at
         FROM matches m
         JOIN teams ht ON ht.id = m.home_team_id
         JOIN teams at ON at.id = m.away_team_id
         JOIN subscriptions s ON s.team_id IN (m.home_team_id, m.away_team_id)
-        WHERE s.user_id = $1 AND m.status IN ('scheduled', 'live')
+        WHERE s.user_id = $1
+          AND (
+            m.status IN ('scheduled', 'live')
+            OR (
+              m.status = 'finished'
+              AND COALESCE(m.last_polled_at, m.starts_at) >= now() - INTERVAL '24 hours'
+            )
+          )
         ORDER BY m.starts_at
         """,
         user_id,
@@ -107,6 +128,7 @@ async def find_match_for_user(user_id, match_id) -> asyncpg.Record | None:
     return await db.fetchrow(
         """
         SELECT m.id, m.external_id, m.status, m.home_score, m.away_score, m.minute,
+               m.last_polled_at,
                ht.name AS home_team, at.name AS away_team, m.starts_at
         FROM matches m
         JOIN teams ht ON ht.id = m.home_team_id
@@ -128,16 +150,12 @@ async def find_all_events_for_match(match_id) -> list[asyncpg.Record]:
         """
         WITH deduped AS (
             SELECT DISTINCT ON (
-                     type,
-                     COALESCE(detail->>'minute', ''),
-                     COALESCE(detail->>'player', '')
-                   )
-                   type, detail, created_at, id
+                type, CASE WHEN type IN ('kickoff', 'full_time') THEN type ELSE id::text END
+            ) type, detail, created_at, id
             FROM match_events
             WHERE match_id = $1
             ORDER BY type,
-                     COALESCE(detail->>'minute', ''),
-                     COALESCE(detail->>'player', ''), id
+                CASE WHEN type IN ('kickoff', 'full_time') THEN type ELSE id::text END, id
         )
         SELECT type, detail, created_at FROM deduped
         ORDER BY created_at ASC, id ASC
@@ -157,16 +175,13 @@ async def find_recent_events_for_matches(
         """
         WITH deduped AS (
             SELECT DISTINCT ON (
-                     match_id, type,
-                     COALESCE(detail->>'minute', ''),
-                     COALESCE(detail->>'player', '')
-                   )
-                   match_id, type, detail, created_at, id
+                match_id, type,
+                CASE WHEN type IN ('kickoff', 'full_time') THEN type ELSE id::text END
+            ) match_id, type, detail, created_at, id
             FROM match_events
             WHERE match_id = ANY($1::uuid[])
             ORDER BY match_id, type,
-                     COALESCE(detail->>'minute', ''),
-                     COALESCE(detail->>'player', ''), id
+                CASE WHEN type IN ('kickoff', 'full_time') THEN type ELSE id::text END, id
         )
         SELECT match_id, type, detail, created_at
         FROM (

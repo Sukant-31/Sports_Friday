@@ -144,3 +144,28 @@ Previously recorded events are treated as historical during migration and are
 not replayed. Delivery is at-least-once: a crash after the push service accepts a
 message but before its receipt commits can cause a repeat; stable notification
 tags help the browser replace repeated alerts.
+
+## Match discovery and data freshness
+
+Following a team immediately discovers both ongoing and upcoming fixtures.
+The dashboard retains finished matches for 24 hours after their final poll.
+Only live fixtures and scheduled fixtures within 15 minutes of kickoff (up to
+6 hours after kickoff) are polled every tick. Fixtures without a kickoff time
+are checked at most once an hour. Distant upcoming matches remain visible but
+are not repeatedly fetched. Live polling still consumes provider requests;
+the configured interval must fit your API plan.
+
+Score increases produce one event per goal, including when provider event
+details are unavailable. Event identity survives reordered provider lists;
+late historical goal details do not send a second alert. Timeline queries
+collapse only kickoff/full-time fan-out rows, preserving distinct goals.
+Provider score reductions update the scoreboard without creating a new goal
+alert; previously sent alerts cannot be recalled.
+
+Discovery automatically repairs team names that were overwritten with provider
+IDs, using verified provider profiles. Unknown profiles are left untouched and
+retried on the next discovery pass. Fixture updates preserve known league data.
+
+Search and follow responses include warnings when live data cannot be fetched.
+The dashboard and match details also warn about missing sports configuration
+or live scores that have not been polled for more than two minutes.

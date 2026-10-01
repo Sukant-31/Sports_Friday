@@ -51,6 +51,7 @@ def normalize_fixture(raw: dict[str, Any]) -> dict[str, Any]:
                 "type": e.get("type"),  # 'Goal' | 'Card' | ...
                 "detail": e.get("detail"),
                 "minute": (e.get("time") or {}).get("elapsed"),
+                "extra_minute": (e.get("time") or {}).get("extra"),
                 "team_external_id": str((e.get("team") or {}).get("id")),
                 "player": (e.get("player") or {}).get("name"),
                 "player_external_id": (

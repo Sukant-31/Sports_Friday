@@ -23,17 +23,22 @@ export default function MatchDetail() {
   const [data, setData] = useState(null); // { match, events } | null
   const [error, setError] = useState(null);
   const [notFound, setNotFound] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [muting, setMuting] = useState(false);
   const timer = useRef(null);
 
   const load = useCallback(async () => {
+    setRefreshing(true);
     try {
       const d = await api.matchDetail(id);
       setData(d);
       setError(null);
+      setNotFound(false);
     } catch (e) {
-      if (/not found/i.test(e.message)) setNotFound(true);
+      if (e.status === 404 || /not found/i.test(e.message)) setNotFound(true);
       else setError(e.message);
+    } finally {
+      setRefreshing(false);
     }
   }, [id]);
 
@@ -95,7 +100,16 @@ export default function MatchDetail() {
         <p className="muted">
           <Link to="/">← Back</Link>
         </p>
-        <div className="card skeleton" style={{ height: 180 }} />
+        {error ? (
+          <div className="card empty">
+            <p role="alert" className="error">Could not load this match: {error}</p>
+            <button onClick={load} disabled={refreshing}>
+              {refreshing ? 'Retrying…' : 'Retry'}
+            </button>
+          </div>
+        ) : (
+          <div className="card skeleton" style={{ height: 180 }} />
+        )}
       </section>
     );
   }
@@ -106,9 +120,10 @@ export default function MatchDetail() {
   return (
     <section className="match-detail">
       <p className="muted">
-        <Link to="/">← Back to live matches</Link>
+        <Link to="/">← Back to your matches</Link>
       </p>
       {error && <p className="error">{error}</p>}
+      {data.warning && <p role="status" className="muted">{data.warning}</p>}
 
       <div className="card scoreboard">
         <span className={`badge${live ? ' live' : ''}`}>

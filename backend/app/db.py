@@ -33,6 +33,8 @@ async def connect() -> asyncpg.Pool:
             max_size=10,
             ssl=ssl_ctx,
             init=_init_connection,
+            timeout=5,
+            command_timeout=30,
         )
     return _pool
 

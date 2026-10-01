@@ -19,6 +19,7 @@ export default function Dashboard() {
   const { user, loading: authLoading } = useAuth();
   const [matches, setMatches] = useState(null); // null = initial loading
   const [error, setError] = useState(null);
+  const [warning, setWarning] = useState(null);
   const [pushMsg, setPushMsg] = useState(null);
   const [updatedAt, setUpdatedAt] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -30,6 +31,7 @@ export default function Dashboard() {
     try {
       const d = await api.liveMatches();
       setMatches(d.matches);
+      setWarning(d.warning);
       setUpdatedAt(Date.now());
       setError(null);
     } catch (e) {
@@ -78,7 +80,7 @@ export default function Dashboard() {
   if (authLoading) {
     return (
       <section>
-        <h1>Live matches</h1>
+        <h1>Your matches</h1>
         <div className="grid">
           {[0, 1, 2].map((i) => (
             <div key={i} className="card skeleton" />
@@ -91,9 +93,9 @@ export default function Dashboard() {
   if (!user) {
     return (
       <section>
-        <h1>Live matches</h1>
+        <h1>Your matches</h1>
         <div className="card empty">
-          <p>Log in to see live matches for the teams you follow.</p>
+          <p>Log in to see matches for the teams you follow.</p>
           <p className="muted">
             <Link to="/login">Log in</Link> or <Link to="/signup">create an account</Link>.
           </p>
@@ -106,9 +108,10 @@ export default function Dashboard() {
     <section>
       <div className="dash-head">
         <div>
-          <h1>Live matches</h1>
+          <h1>Your matches</h1>
+          <p className="muted">Live, upcoming, and finished matches from the last 24 hours.</p>
           <p className="updated">
-            {updatedAt ? `Updated ${relTime(updatedAt)}` : 'Loading…'}
+            {updatedAt ? `Checked ${relTime(updatedAt)}` : 'Loading…'}
             {refreshing && <span className="spinner" aria-label="refreshing" />}
           </p>
         </div>
@@ -121,6 +124,7 @@ export default function Dashboard() {
       </div>
 
       {pushMsg && <p className="muted">{pushMsg}</p>}
+      {warning && <p role="status" className="muted">{warning}</p>}
       {error && (
         <p className="error">
           {error} — <button className="link" onClick={load}>retry</button>
@@ -135,9 +139,9 @@ export default function Dashboard() {
         </div>
       ) : matches.length === 0 ? (
         <div className="card empty">
-          <p>No live matches for your followed teams right now.</p>
+          <p>No upcoming, live, or recently finished matches for your followed teams.</p>
           <p className="muted">
-            Follow more teams from <strong>Find teams</strong>, and their live
+            Follow more teams from <strong>Find teams</strong>, and their
             matches will appear here automatically.
           </p>
         </div>

@@ -7,14 +7,19 @@ from fastapi import HTTPException, status
 from app.repositories import subscriptions as subs_repo
 from app.repositories import teams as teams_repo
 from app.schemas import SubscriptionCreate, SubscriptionUpdate
+from app.logging_conf import get_logger
+from app.workers.discovery import discover_team
+
+log = get_logger("subscription_service")
 
 
 async def list_subscriptions(user_id: UUID) -> list[dict]:
     return [dict(r) for r in await subs_repo.list_subscriptions(user_id)]
 
 
-async def create(user_id: UUID, payload: SubscriptionCreate) -> dict:
-    if not await teams_repo.find_team_by_id(payload.team_id):
+async def create(user_id: UUID, payload: SubscriptionCreate, client) -> dict:
+    team = await teams_repo.find_team_by_id(payload.team_id)
+    if not team:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Team not found")
     row = await subs_repo.create_subscription(
         user_id,
@@ -23,7 +28,15 @@ async def create(user_id: UUID, payload: SubscriptionCreate) -> dict:
         payload.notify_cards,
         payload.notify_match_status,
     )
-    return dict(row)
+    # Await discovery so fixtures are available when the user opens the dashboard.
+    # A failed refresh must not turn an already-saved follow into an API error.
+    warning = None
+    try:
+        await discover_team(client, team["external_id"])
+    except Exception as exc:
+        log.warning("initial fixture discovery failed for team %s: %s", team["external_id"], exc)
+        warning = "Team followed, but fixtures could not be refreshed. We will retry automatically."
+    return {**dict(row), "warning": warning}
 
 
 async def update(user_id: UUID, sub_id: UUID, payload: SubscriptionUpdate) -> dict:

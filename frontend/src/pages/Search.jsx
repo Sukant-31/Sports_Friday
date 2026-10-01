@@ -6,6 +6,7 @@ export default function Search() {
   const [q, setQ] = useState('');
   const [results, setResults] = useState([]);
   const [error, setError] = useState(null);
+  const [warning, setWarning] = useState(null);
   const [loading, setLoading] = useState(false);
 
   async function onSearch(e) {
@@ -13,9 +14,11 @@ export default function Search() {
     if (q.trim().length < 2) return;
     setLoading(true);
     setError(null);
+    setWarning(null);
     try {
-      const { teams } = await api.searchTeams(q.trim());
+      const { teams, warning } = await api.searchTeams(q.trim());
       setResults(teams);
+      setWarning(warning);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -25,7 +28,8 @@ export default function Search() {
 
   async function follow(team) {
     try {
-      await api.subscribe(team.id);
+      const { subscription } = await api.subscribe(team.id);
+      setWarning(subscription.warning);
       setResults((prev) => prev.map((t) => (t.id === team.id ? { ...t, followed: true } : t)));
     } catch (err) {
       setError(err.message);
@@ -44,6 +48,7 @@ export default function Search() {
         <button type="submit" disabled={loading}>{loading ? 'Searching…' : 'Search'}</button>
       </form>
       {error && <p className="error">{error}</p>}
+      {warning && <p role="status" className="muted">{warning}</p>}
       <div className="grid">
         {results.map((t) => (
           <TeamCard key={t.id} team={t} onFollow={() => follow(t)} />

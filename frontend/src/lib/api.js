@@ -1,5 +1,5 @@
 // Thin fetch wrapper. credentials:'include' sends the httpOnly auth cookie.
-// In dev, Vite proxies /api -> http://localhost:4000 (same-origin cookies).
+// In dev, Vite proxies /api -> http://localhost:8000 (same-origin cookies).
 
 async function request(path, { method = 'GET', body } = {}) {
   const res = await fetch(`/api${path}`, {
@@ -12,7 +12,10 @@ async function request(path, { method = 'GET', body } = {}) {
   if (res.status === 204) return null;
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
-    throw new Error(data.error ?? `Request failed (${res.status})`);
+    const detail = typeof data.detail === 'string' ? data.detail : null;
+    const error = new Error(data.error ?? detail ?? `Request failed (${res.status})`);
+    error.status = res.status;
+    throw error;
   }
   return data;
 }

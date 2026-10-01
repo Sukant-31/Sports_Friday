@@ -127,6 +127,9 @@ class MockSportsApiClient:
     async def get_live_fixtures(self) -> dict[str, Any]:
         return self._timeline[self._idx][1]
 
+    async def get_team_live_fixtures(self, team_external_id: str) -> dict[str, Any]:
+        return {"response": []}
+
     async def get_team_fixtures(self, team_external_id: str, count: int) -> dict[str, Any]:
         # Discovery over the same scripted match (as an upcoming fixture).
         match_external_id = self._timeline[0][1]["response"][0]["fixture"]["id"]
@@ -140,6 +143,12 @@ class MockSportsApiClient:
                 {"team": {"id": HOME_ID, "name": "Home FC"}, "league": {"name": "Demo League"}}
             ]
         }
+
+    async def get_team(self, external_id: str) -> dict[str, Any]:
+        names = {"100": "Home FC", "200": "Away United"}
+        if external_id not in names:
+            return {"response": []}
+        return {"response": [{"team": {"id": external_id, "name": names[external_id]}}]}
 
     async def aclose(self) -> None:
         return None

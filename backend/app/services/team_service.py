@@ -10,12 +10,12 @@ from app.sports_api.client import SportsApiError
 log = get_logger("team_service")
 
 
-async def search_teams(request: Request, q: str) -> list[dict]:
+async def search_teams(request: Request, q: str) -> dict:
     """Search-then-cache: serve from the local cache when it's rich enough,
     otherwise hit the sports API and upsert results into the teams table."""
     cached = await teams_repo.search_teams_cached(q)
     if len(cached) >= 5:
-        return [dict(r) for r in cached]
+        return {"teams": [dict(r) for r in cached], "warning": None}
 
     client = request.app.state.sports_client
     try:
@@ -27,7 +27,8 @@ async def search_teams(request: Request, q: str) -> list[dict]:
             if t["external_id"] and t["name"]
         ]
         merged = {r["id"]: dict(r) for r in [*cached, *upserted]}
-        return list(merged.values())
+        return {"teams": list(merged.values()), "warning": None}
     except SportsApiError as exc:
         log.warning("team search fell back to cache: %s", exc)
-        return [dict(r) for r in cached]  # degrade gracefully
+        return {"teams": [dict(r) for r in cached],
+                "warning": "Live team search is unavailable. Showing saved results; try again later."}

@@ -1,15 +1,30 @@
 from __future__ import annotations
 
 from collections import defaultdict
+from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 
 from app.deps import get_current_user_id
+from app.config import settings
 from app.repositories import matches as matches_repo
 from app.repositories import muted_matches as muted_repo
 
 router = APIRouter(prefix="/api/matches", tags=["matches"])
+
+
+def _data_warning(matches) -> str | None:
+    if not settings.sports_api_key:
+        return "Live sports data is not configured. Scores cannot update until the service is configured."
+    now = datetime.now(timezone.utc)
+    for match in matches:
+        if match["status"] != "live":
+            continue
+        polled = match.get("last_polled_at")
+        if polled is None or now - polled > timedelta(minutes=2):
+            return "Live scores may be out of date. Updates are delayed; showing the last saved data."
+    return None
 
 
 def _shape_event(ev) -> dict:
@@ -40,7 +55,7 @@ async def live(user_id: UUID = Depends(get_current_user_id)) -> dict:
         m["events"] = events_by_match.get(m["id"], [])
         m["muted"] = m["id"] in muted
 
-    return {"matches": matches}
+    return {"matches": matches, "warning": _data_warning(matches)}
 
 
 @router.get("/{match_id}")
@@ -51,7 +66,8 @@ async def detail(match_id: UUID, user_id: UUID = Depends(get_current_user_id)) -
     events = await matches_repo.find_all_events_for_match(match_id)
     out = dict(match)
     out["muted"] = await muted_repo.is_muted(user_id, match_id)
-    return {"match": out, "events": [_shape_event(ev) for ev in events]}
+    return {"match": out, "events": [_shape_event(ev) for ev in events],
+            "warning": _data_warning([out])}
 
 
 async def _require_visible_match(user_id, match_id) -> None:

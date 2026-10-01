@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Response, status
+from fastapi import APIRouter, Depends, Request, Response, status
 
 from app.deps import get_current_user_id
 from app.schemas import SubscriptionCreate, SubscriptionUpdate
@@ -18,9 +18,9 @@ async def list_subscriptions(user_id: UUID = Depends(get_current_user_id)) -> di
 
 @router.post("", status_code=status.HTTP_201_CREATED)
 async def create(
-    body: SubscriptionCreate, user_id: UUID = Depends(get_current_user_id)
+    body: SubscriptionCreate, request: Request, user_id: UUID = Depends(get_current_user_id)
 ) -> dict:
-    return {"subscription": await svc.create(user_id, body)}
+    return {"subscription": await svc.create(user_id, body, request.app.state.sports_client)}
 
 
 @router.patch("/{sub_id}")

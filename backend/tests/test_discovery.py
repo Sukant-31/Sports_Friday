@@ -4,6 +4,7 @@ skips cleanly without it. Assumes migrations applied."""
 from __future__ import annotations
 
 import uuid
+from datetime import datetime, timezone
 
 import pytest
 import pytest_asyncio
@@ -14,7 +15,7 @@ from app.repositories import matches as matches_repo
 from app.repositories import subscriptions as subs_repo
 from app.repositories import teams as teams_repo
 from app.repositories import users as users_repo
-from app.sports_api.mock import MockSportsApiClient, build_timeline
+from app.sports_api.mock import MockSportsApiClient, build_timeline, build_team_fixtures
 from app.workers.discovery import discover
 
 
@@ -38,6 +39,11 @@ async def test_discovery_upserts_fixtures_for_subscribed_teams(infra):
     await subs_repo.create_subscription(user["id"], home["id"], True, True, True)
 
     client = MockSportsApiClient(build_timeline(match_ext))
+    async def upcoming(team_id, count):
+        raw = build_team_fixtures(match_ext)
+        raw["response"][0]["fixture"]["date"] = datetime.now(timezone.utc).isoformat()
+        return raw
+    client.get_team_fixtures = upcoming
     try:
         count = await discover(client)
         assert count >= 1

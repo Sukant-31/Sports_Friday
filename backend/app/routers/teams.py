@@ -19,5 +19,5 @@ async def search(
     q: str = Query(min_length=2, max_length=60),
     _user: UUID = Depends(get_current_user_id),
 ) -> dict:
-    teams = await team_service.search_teams(request, q)
-    return {"teams": [TeamOut(**t) for t in teams]}
+    result = await team_service.search_teams(request, q)
+    return {"teams": [TeamOut(**t) for t in result["teams"]], "warning": result["warning"]}

@@ -11,7 +11,9 @@ async def upsert_team(external_id: str, name: str, league: str | None = None) ->
         INSERT INTO teams (external_id, name, league)
         VALUES ($1, $2, $3)
         ON CONFLICT (external_id) DO UPDATE
-          SET name = EXCLUDED.name, league = EXCLUDED.league
+          SET name = CASE WHEN EXCLUDED.name = EXCLUDED.external_id
+                          THEN teams.name ELSE EXCLUDED.name END,
+              league = COALESCE(EXCLUDED.league, teams.league)
         RETURNING id, external_id, name, league
         """,
         external_id,
@@ -48,3 +50,7 @@ async def find_subscribed_teams() -> list[asyncpg.Record]:
         JOIN subscriptions s ON s.team_id = t.id
         """
     )
+
+
+async def find_teams_needing_name_repair() -> list[asyncpg.Record]:
+    return await db.fetch("SELECT id, external_id FROM teams WHERE name = external_id")
