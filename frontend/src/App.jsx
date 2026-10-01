@@ -1,4 +1,4 @@
-import { Routes, Route, Navigate, Link, useNavigate } from 'react-router-dom';
+import { Routes, Route, Navigate, Link, NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from './lib/auth.jsx';
 import Login from './pages/Login.jsx';
 import Signup from './pages/Signup.jsx';
@@ -14,9 +14,9 @@ function Nav() {
     <nav className="nav">
       <Link to="/" className="brand">⚽ Sports Alerts</Link>
       <div className="nav-links">
-        <Link to="/">Dashboard</Link>
-        <Link to="/search">Find teams</Link>
-        <Link to="/settings">Settings</Link>
+        <NavLink to="/" end>Dashboard</NavLink>
+        <NavLink to="/search">Find teams</NavLink>
+        <NavLink to="/settings">Settings</NavLink>
         {user ? (
           <button onClick={() => logout().then(() => navigate('/login'))}>Log out</button>
         ) : (

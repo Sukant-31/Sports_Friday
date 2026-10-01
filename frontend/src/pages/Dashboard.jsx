@@ -17,6 +17,7 @@ function relTime(ts) {
 
 export default function Dashboard() {
   const { user, loading: authLoading } = useAuth();
+  const [filter, setFilter] = useState('all');
   const [matches, setMatches] = useState(null); // null = initial loading
   const [error, setError] = useState(null);
   const [warning, setWarning] = useState(null);
@@ -77,10 +78,18 @@ export default function Dashboard() {
     }
   }
 
+  const counts = {
+    live: matches?.filter((m) => m.status === 'live').length ?? 0,
+    scheduled: matches?.filter((m) => m.status === 'scheduled').length ?? 0,
+    finished: matches?.filter((m) => m.status === 'finished').length ?? 0,
+  };
+  const visibleMatches = matches?.filter((m) => filter === 'all' || m.status === filter);
+
   if (authLoading) {
     return (
-      <section>
-        <h1>Your matches</h1>
+      <section className="dashboard">
+        <p className="eyebrow">YOUR PERSONAL MATCHDAY</p>
+          <h1>Your matches<span className="heading-dot">.</span></h1>
         <div className="grid">
           {[0, 1, 2].map((i) => (
             <div key={i} className="card skeleton" />
@@ -92,9 +101,12 @@ export default function Dashboard() {
 
   if (!user) {
     return (
-      <section>
-        <h1>Your matches</h1>
+      <section className="dashboard">
+        <p className="eyebrow">YOUR PERSONAL MATCHDAY</p>
+          <h1>Your matches<span className="heading-dot">.</span></h1>
         <div className="card empty">
+          <div className="empty-icon" aria-hidden="true">⚽</div>
+          <h2>Your matchday starts here</h2>
           <p>Log in to see matches for the teams you follow.</p>
           <p className="muted">
             <Link to="/login">Log in</Link> or <Link to="/signup">create an account</Link>.
@@ -105,10 +117,11 @@ export default function Dashboard() {
   }
 
   return (
-    <section>
+    <section className="dashboard">
       <div className="dash-head">
         <div>
-          <h1>Your matches</h1>
+          <p className="eyebrow">YOUR PERSONAL MATCHDAY</p>
+          <h1>Your matches<span className="heading-dot">.</span></h1>
           <p className="muted">Live, upcoming, and finished matches from the last 24 hours.</p>
           <p className="updated">
             {updatedAt ? `Checked ${relTime(updatedAt)}` : 'Loading…'}
@@ -121,6 +134,25 @@ export default function Dashboard() {
           </button>
           <button onClick={onEnablePush}>Enable notifications</button>
         </div>
+      </div>
+
+      <div className="match-summary" aria-label="Match overview">
+        {[['live', 'Live now', 'Happening on the pitch'], ['scheduled', 'Upcoming', 'Next up for your teams'], ['finished', 'Full time', 'The latest results']].map(([status, label, detail]) => (
+          <div className={`summary-card ${status}`} key={status}>
+            <span className="summary-label">{status === 'live' && <span className="summary-dot" />} {label}</span>
+            <strong>{matches === null ? '—' : counts[status]}</strong>
+            <span className="muted">{detail}</span>
+          </div>
+        ))}
+      </div>
+      <div className="match-toolbar">
+        <div><h2>Match centre</h2><p className="muted">All the action from the teams you follow.</p></div>
+        <Link className="text-link" to="/search">Find teams <span aria-hidden="true">↗</span></Link>
+      </div>
+      <div className="match-filters" role="group" aria-label="Filter matches">
+        {[['all', 'All matches'], ['live', 'Live'], ['scheduled', 'Upcoming'], ['finished', 'Finished']].map(([value, label]) => (
+          <button key={value} className={filter === value ? 'selected' : ''} aria-pressed={filter === value} onClick={() => setFilter(value)}>{label}</button>
+        ))}
       </div>
 
       {pushMsg && <p className="muted">{pushMsg}</p>}
@@ -139,15 +171,19 @@ export default function Dashboard() {
         </div>
       ) : matches.length === 0 ? (
         <div className="card empty">
+          <div className="empty-icon" aria-hidden="true">⚽</div>
+          <h2>Waiting for the next whistle</h2>
           <p>No upcoming, live, or recently finished matches for your followed teams.</p>
           <p className="muted">
-            Follow more teams from <strong>Find teams</strong>, and their
+            Follow more teams from <Link className="text-link" to="/search">Find teams</Link>, and their
             matches will appear here automatically.
           </p>
         </div>
+      ) : visibleMatches.length === 0 ? (
+        <div className="card empty"><h2>No {filter === 'scheduled' ? 'upcoming' : filter} matches right now</h2><p className="muted">Check another filter to catch up on your teams.</p></div>
       ) : (
         <div className="grid">
-          {matches.map((m) => (
+          {visibleMatches.map((m) => (
             <MatchTile key={m.id} match={m} />
           ))}
         </div>
