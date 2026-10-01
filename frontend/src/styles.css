@@ -45,6 +45,10 @@ body {
 
 .form { max-width: 380px; margin: 3rem auto; display: flex; flex-direction: column; gap: 0.75rem; }
 .form label { display: flex; flex-direction: column; gap: 0.25rem; font-size: 0.9rem; }
+.password-field { display: flex; flex-direction: column; gap: 0.25rem; }
+.password-control { display: flex; align-items: center; border: 1px solid var(--border); border-radius: 6px; background: white; }
+.password-control input { min-width: 0; width: 100%; border: none; background: transparent; }
+button.password-toggle { flex-shrink: 0; background: transparent; color: var(--green); padding: 0.55rem 0.65rem; font-size: 0.75rem; }
 input {
   padding: 0.55rem 0.7rem; border: 1px solid var(--border); border-radius: 6px; font-size: 1rem;
 }

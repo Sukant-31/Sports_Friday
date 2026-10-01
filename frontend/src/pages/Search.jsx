@@ -41,7 +41,7 @@ export default function Search() {
       <h1>Find teams</h1>
       <form className="row" onSubmit={onSearch}>
         <input
-          placeholder="Search a team, e.g. Arsenal"
+          placeholder="Search a team, e.g. Barcelona"
           value={q}
           onChange={(e) => setQ(e.target.value)}
         />
