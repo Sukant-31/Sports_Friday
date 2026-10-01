@@ -34,19 +34,20 @@ export default function MatchTile({ match }) {
   }, [scoreKey]);
 
   return (
-    <Link to={`/matches/${match.id}`} className="card match-tile tile-link">
+    <Link to={`/matches/${match.id}`} className={`card match-tile tile-link match-${match.status}`}>
       <div className="match-head">
         {match.muted && <span className="muted-tag" title="Muted">🔕</span>}
         <StatusBadge match={match} />
       </div>
       <div className="match-teams">
-        <span className="team">{match.home_team}</span>
+        <span className="team"><span className="team-monogram" aria-hidden="true">{match.home_team?.slice(0, 3).toUpperCase()}</span>{match.home_team}</span>
         <span className={`score${flash ? ' flash' : ''}`}>
           {match.home_score}<span className="dash">–</span>{match.away_score}
         </span>
-        <span className="team">{match.away_team}</span>
+        <span className="team"><span className="team-monogram away" aria-hidden="true">{match.away_team?.slice(0, 3).toUpperCase()}</span>{match.away_team}</span>
       </div>
       <EventFeed events={match.events} />
+      <div className="tile-footer"><span>Match details</span><span aria-hidden="true">↗</span></div>
     </Link>
   );
 }

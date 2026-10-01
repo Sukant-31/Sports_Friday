@@ -12,7 +12,7 @@ function Nav() {
   const navigate = useNavigate();
   return (
     <nav className="nav">
-      <Link to="/" className="brand">⚽ Sports Alerts</Link>
+      <Link to="/" className="brand"><span className="brand-mark" aria-hidden="true">◉</span> sports<span className="brand-plus">+</span></Link>
       <div className="nav-links">
         <NavLink to="/" end>Dashboard</NavLink>
         <NavLink to="/search">Find teams</NavLink>

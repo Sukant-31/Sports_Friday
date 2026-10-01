@@ -13,10 +13,10 @@ router = APIRouter(prefix="/api/teams", tags=["teams"])
 
 
 @router.get("/search")
-@limiter.limit("30/minute")
+@limiter.limit("120/minute")
 async def search(
     request: Request,
-    q: str = Query(min_length=2, max_length=60),
+    q: str = Query(default="", max_length=60),
     _user: UUID = Depends(get_current_user_id),
 ) -> dict:
     result = await team_service.search_teams(request, q)

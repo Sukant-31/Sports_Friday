@@ -23,15 +23,35 @@ async def upsert_team(external_id: str, name: str, league: str | None = None) ->
 
 
 async def search_teams_cached(q: str) -> list[asyncpg.Record]:
+    from app.services.team_search import normalize_query
+
+    query = normalize_query(q)
+    if len(query) < 2:
+        return []
     return await db.fetch(
         """
         SELECT id, external_id, name, league
         FROM teams
-        WHERE name ILIKE $1
-        ORDER BY name
-        LIMIT 20
+        WHERE lower(name) LIKE $2
+           OR lower(name) % $1
+           OR $1 <% lower(name)
+           OR (lower(name) LIKE $4 AND
+               (SELECT bool_and(lower(name) LIKE '%' || token || '%')
+                FROM unnest($3::text[]) AS token))
+        ORDER BY CASE
+            WHEN lower(name) = $1 THEN 0
+            WHEN lower(name) LIKE $1 || '%' THEN 1
+            WHEN lower(name) ~ $5 THEN 2
+            WHEN lower(name) LIKE $2 THEN 3
+            ELSE 4 END,
+            word_similarity($1, lower(name)) DESC, lower(name), id
+        LIMIT 250
         """,
-        f"%{q}%",
+        query,
+        f"%{query}%",
+        query.split(),
+        f"%{max(query.split(), key=len)}%",
+        r"\m" + r"\w*\M.*\m".join(query.split()),
     )
 
 

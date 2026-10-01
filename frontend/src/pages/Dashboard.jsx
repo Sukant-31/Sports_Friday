@@ -85,15 +85,26 @@ export default function Dashboard() {
   };
   const visibleMatches = matches?.filter((m) => filter === 'all' || m.status === filter);
 
+  const featured = matches?.find((m) => m.status === 'live') ?? matches?.find((m) => m.status === 'scheduled') ?? matches?.[0];
+
   if (authLoading) {
     return (
       <section className="dashboard">
-        <p className="eyebrow">YOUR PERSONAL MATCHDAY</p>
-          <h1>Your matches<span className="heading-dot">.</span></h1>
-        <div className="grid">
-          {[0, 1, 2].map((i) => (
-            <div key={i} className="card skeleton" />
-          ))}
+        <div className="dash-head welcome-hero">
+          <div className="hero-art" aria-hidden="true"><div className="pitch" /><span className="hero-ball">⚽</span></div>
+          <div className="hero-copy">
+            <p className="eyebrow">SPORTS ALERTS · MATCHDAY</p>
+            <h1>The game.<br />Closer than ever.</h1>
+            <p className="hero-description">Your teams. Every score. Every moment that matters.</p>
+            <div className="hero-buttons"><Link className="primary-link" to="/login">Log in to your matchday</Link><Link className="secondary-link" to="/signup">Create account</Link></div>
+            <p className="hero-note">Follow your favourites and get live match alerts.</p>
+          </div>
+        </div>
+        <div className="match-toolbar"><div><p className="eyebrow">MADE FOR THE FANS</p><h2>All your football. One place.</h2></div><Link className="text-link" to="/search">Explore teams ↗</Link></div>
+        <div className="welcome-features">
+          <div><span>01 / LIVE</span><h3>Never miss a moment.</h3><p>Scores and match events as the action unfolds.</p></div>
+          <div><span>02 / YOUR TEAMS</span><h3>A matchday of your own.</h3><p>Follow the clubs you love and keep their fixtures close.</p></div>
+          <div><span>03 / ALERTS</span><h3>Stay in the game.</h3><p>Enable notifications for goals, cards, and full time.</p></div>
         </div>
       </section>
     );
@@ -119,20 +130,16 @@ export default function Dashboard() {
   return (
     <section className="dashboard">
       <div className="dash-head">
-        <div>
-          <p className="eyebrow">YOUR PERSONAL MATCHDAY</p>
-          <h1>Your matches<span className="heading-dot">.</span></h1>
-          <p className="muted">Live, upcoming, and finished matches from the last 24 hours.</p>
-          <p className="updated">
-            {updatedAt ? `Checked ${relTime(updatedAt)}` : 'Loading…'}
-            {refreshing && <span className="spinner" aria-label="refreshing" />}
-          </p>
-        </div>
-        <div className="dash-actions">
-          <button className="ghost" onClick={load} disabled={refreshing}>
-            Refresh
-          </button>
-          <button onClick={onEnablePush}>Enable notifications</button>
+        <div className="hero-art" aria-hidden="true"><div className="pitch" /><span className="hero-ball">⚽</span></div>
+        <div className="hero-copy">
+          <p className="eyebrow">{featured?.status === 'live' ? 'LIVE NOW · YOUR MATCHDAY' : 'SPORTS ALERTS · YOUR MATCHDAY'}</p>
+          <h1>{featured ? <>{featured.home_team}<span className="hero-vs">vs</span>{featured.away_team}</> : <>Every game.<br />Every emotion.</>}</h1>
+          <p className="hero-description">{featured ? 'Follow every moment. Get the score, the goals, and the story of the match.' : 'Live scores, upcoming fixtures, and the latest results. All for the teams you love.'}</p>
+          <div className="hero-buttons">
+            <Link className="primary-link" to={featured ? `/matches/${featured.id}` : '/search'}>{featured ? 'View match' : 'Find your teams'} <span aria-hidden="true">↗</span></Link>
+            <button className="ghost" onClick={onEnablePush}>Enable notifications</button>
+          </div>
+          <p className="updated">{updatedAt ? `Updated ${relTime(updatedAt)}` : 'Loading your matches…'}{refreshing && <span className="spinner" aria-label="refreshing" />}</p>
         </div>
       </div>
 
@@ -146,8 +153,8 @@ export default function Dashboard() {
         ))}
       </div>
       <div className="match-toolbar">
-        <div><h2>Match centre</h2><p className="muted">All the action from the teams you follow.</p></div>
-        <Link className="text-link" to="/search">Find teams <span aria-hidden="true">↗</span></Link>
+        <div><h2>Your match collection</h2><p className="muted">All the action from the teams you follow.</p></div>
+        <div className="collection-actions"><button className="ghost" onClick={load} disabled={refreshing}>{refreshing ? 'Refreshing…' : 'Refresh'}</button><Link className="text-link" to="/search">Find teams ↗</Link></div>
       </div>
       <div className="match-filters" role="group" aria-label="Filter matches">
         {[['all', 'All matches'], ['live', 'Live'], ['scheduled', 'Upcoming'], ['finished', 'Finished']].map(([value, label]) => (
