@@ -61,7 +61,8 @@ async def test_cron_route_recovers_missing_column_before_polling(monkeypatch):
                                     base_url='http://test') as http:
             result = await http.get('/api/cron/poll', headers={'Authorization': 'Bearer test-secret'})
             assert result.status_code == 200
-            assert result.json() == {'discovered': 1}
+            assert result.json()['discovered'] == 1
+            assert result.json()['ok'] is True
         client.aclose.assert_awaited_once()
     finally:
         await conn.close()

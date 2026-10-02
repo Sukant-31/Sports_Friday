@@ -6,6 +6,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 
@@ -59,7 +60,10 @@ def create_app() -> FastAPI:
         for why this replaces the standalone poller+notifier on serverless."""
         if settings.cron_secret and authorization != f"Bearer {settings.cron_secret}":
             raise HTTPException(status_code=401, detail="unauthorized")
-        return await run_once()
+        result = await run_once()
+        if not result['ok']:
+            return JSONResponse(status_code=503, content=result)
+        return result
 
     app.include_router(auth.router)
     app.include_router(teams.router)
@@ -70,8 +74,6 @@ def create_app() -> FastAPI:
 
 
 def _rate_limit_handler(request, exc):
-    from fastapi.responses import JSONResponse
-
     return JSONResponse(
         status_code=429, content={"error": "Too many requests, try again later"}
     )

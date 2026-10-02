@@ -23,6 +23,7 @@ from app.sports_api.client import SportsApiClient
 from app.workers.dedup_key import dedup_key
 from app.workers.diff import diff_match
 from app.workers.discovery import discover
+from app.workers.run_report import RunReport
 
 log = get_logger("poller")
 
@@ -97,7 +98,7 @@ async def poll_match(client: SportsApiClient, notify: Notify, match) -> None:
     )
 
 
-async def tick(client: SportsApiClient, notify: Notify) -> None:
+async def tick(client: SportsApiClient, notify: Notify, *, report: RunReport | None = None) -> None:
     matches = await matches_repo.find_pollable_matches()
     if not matches:
         log.debug("no subscribed matches to poll")
@@ -105,7 +106,11 @@ async def tick(client: SportsApiClient, notify: Notify) -> None:
     for match in matches:
         try:
             await poll_match(client, notify, match)
+            if report is not None:
+                report.record('polling', match['id'])
         except Exception as exc:  # noqa: BLE001 - one bad match shouldn't kill the tick
+            if report is not None:
+                report.record('polling', match['id'], exc)
             log.warning("poll failed for match %s: %s", match["id"], exc)
 
     # Retry durable pending events even after a match has finished, or enqueue failed.

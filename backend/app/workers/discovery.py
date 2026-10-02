@@ -14,6 +14,7 @@ from app.repositories import matches as matches_repo
 from app.repositories import teams as teams_repo
 from app.sports_api import normalize
 from app.sports_api.client import SportsApiError
+from app.workers.run_report import RunReport
 
 log = get_logger("discovery")
 
@@ -27,9 +28,9 @@ def _parse_dt(value: str | None) -> datetime | None:
         return None
 
 
-async def discover(client) -> int:
+async def discover(client, *, report: RunReport | None = None) -> int:
     """Returns the number of fixtures upserted."""
-    await repair_team_names(client)
+    await repair_team_names(client, report=report)
     teams = await teams_repo.find_subscribed_teams()
     if not teams:
         log.debug("no subscribed teams to discover fixtures for")
@@ -42,15 +43,19 @@ async def discover(client) -> int:
     upserted = 0
     for team in teams:
         try:
-            upserted += await discover_team(client, team["external_id"], refresh=False)
+            upserted += await discover_team(client, team["external_id"], refresh=False, report=report)
+            if report is not None:
+                report.record('discovery', team['external_id'])
         except SportsApiError as exc:
+            if report is not None:
+                report.record('discovery', team['external_id'], exc)
             log.warning("fixture discovery failed for team %s: %s", team["external_id"], exc)
 
     log.info("discovery upserted %d fixture(s) for %d team(s)", upserted, len(teams))
     return upserted
 
 
-async def repair_team_names(client) -> int:
+async def repair_team_names(client, *, report: RunReport | None = None) -> int:
     """Repair names previously replaced with provider IDs, without guessing."""
     repaired = 0
     for team in await teams_repo.find_teams_needing_name_repair():
@@ -63,12 +68,17 @@ async def repair_team_names(client) -> int:
                         profile["external_id"], profile["name"], profile["league"],
                     )
                     repaired += 1
+            if report is not None:
+                report.record('name_repair', team['external_id'])
         except SportsApiError as exc:
+            if report is not None:
+                report.record('name_repair', team['external_id'], exc)
             log.warning("team name repair failed for %s: %s", team["external_id"], exc)
     return repaired
 
 
-async def discover_team(client, external_id: str, *, refresh: bool = True) -> int:
+async def discover_team(client, external_id: str, *, refresh: bool = True,
+                        report: RunReport | None = None) -> int:
     """Discover fixtures for one team, including immediately after a follow."""
     if refresh and hasattr(client, "begin_fixture_discovery"):
         client.begin_fixture_discovery()
@@ -104,6 +114,8 @@ async def discover_team(client, external_id: str, *, refresh: bool = True) -> in
             fx.get("minute"),
         )
         upserted += 1
+        if report is not None:
+            report.fixtures_upserted += 1
     if failure is not None:
         raise failure
     return upserted
