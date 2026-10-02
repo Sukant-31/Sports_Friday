@@ -1,10 +1,12 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { api } from '../lib/api.js';
 import NotificationToggle from '../components/NotificationToggle.jsx';
 
 export default function Settings() {
   const [subs, setSubs] = useState([]);
   const [error, setError] = useState(null);
+  const saving = useRef(new Set());
+  const [pending, setPending] = useState(new Set());
 
   useEffect(() => {
     api.listSubscriptions()
@@ -19,24 +21,34 @@ export default function Settings() {
     notify_match_status: 'notifyMatchStatus',
   };
 
-  async function toggle(sub, field) {
-    const value = !sub[field];
-    // optimistic update (snake_case for local display state)
-    setSubs((prev) => prev.map((s) => (s.id === sub.id ? { ...s, [field]: value } : s)));
+  async function save(id, change) {
+    if (saving.current.has(id)) return;
+    saving.current.add(id);
+    setPending(new Set(saving.current));
+    setError(null);
     try {
-      await api.updateSubscription(sub.id, { [API_FIELD[field]]: value });
+      await change();
     } catch (err) {
       setError(err.message);
+    } finally {
+      saving.current.delete(id);
+      setPending(new Set(saving.current));
     }
   }
 
-  async function unfollow(sub) {
-    setSubs((prev) => prev.filter((s) => s.id !== sub.id));
-    try {
+  function toggle(sub, field) {
+    const value = !sub[field];
+    return save(sub.id, async () => {
+      await api.updateSubscription(sub.id, { [API_FIELD[field]]: value });
+      setSubs((prev) => prev.map((s) => (s.id === sub.id ? { ...s, [field]: value } : s)));
+    });
+  }
+
+  function unfollow(sub) {
+    return save(sub.id, async () => {
       await api.unsubscribe(sub.id);
-    } catch (err) {
-      setError(err.message);
-    }
+      setSubs((prev) => prev.filter((s) => s.id !== sub.id));
+    });
   }
 
   return (
@@ -48,15 +60,15 @@ export default function Settings() {
       ) : (
         <ul className="list">
           {subs.map((s) => (
-            <li key={s.id} className="card">
+            <li key={s.id} className="card" aria-busy={pending.has(s.id)}>
               <div className="row-between">
                 <strong>{s.team_name}</strong>
-                <button className="link" onClick={() => unfollow(s)}>Unfollow</button>
+                <button className="link" disabled={pending.has(s.id)} onClick={() => unfollow(s)}>Unfollow</button>
               </div>
               <div className="toggles">
-                <NotificationToggle label="Goals" on={s.notify_goals} onToggle={() => toggle(s, 'notify_goals')} />
-                <NotificationToggle label="Cards" on={s.notify_cards} onToggle={() => toggle(s, 'notify_cards')} />
-                <NotificationToggle label="Kickoff / full-time" on={s.notify_match_status} onToggle={() => toggle(s, 'notify_match_status')} />
+                <NotificationToggle label="Goals" on={s.notify_goals} disabled={pending.has(s.id)} onToggle={() => toggle(s, 'notify_goals')} />
+                <NotificationToggle label="Cards" on={s.notify_cards} disabled={pending.has(s.id)} onToggle={() => toggle(s, 'notify_cards')} />
+                <NotificationToggle label="Kickoff / full-time" on={s.notify_match_status} disabled={pending.has(s.id)} onToggle={() => toggle(s, 'notify_match_status')} />
               </div>
             </li>
           ))}
