@@ -5,6 +5,13 @@ import asyncpg
 from app import db
 
 
+async def find_subscription_for_user(user_id, endpoint: str) -> asyncpg.Record | None:
+    return await db.fetchrow(
+        "SELECT id AS push_id, endpoint, p256dh, auth FROM push_subscriptions "
+        "WHERE user_id = $1 AND endpoint = $2", user_id, endpoint,
+    )
+
+
 async def upsert_push_subscription(
     user_id, endpoint: str, p256dh: str, auth: str
 ) -> asyncpg.Record:
