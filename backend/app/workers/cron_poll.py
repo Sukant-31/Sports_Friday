@@ -6,6 +6,7 @@ notifier process around to consume that queue."""
 from __future__ import annotations
 
 from app.logging_conf import get_logger
+from app.notification_schema import ensure_notification_delivery_schema
 from app.sports_api.client import SportsApiClient
 from app.workers.discovery import discover
 from app.workers.notifier import deliver_event_notification
@@ -17,13 +18,18 @@ log = get_logger("cron_poll")
 async def run_once() -> dict:
     client = SportsApiClient()
     try:
+        await ensure_notification_delivery_schema()
         try:
             discovered = await discover(client)
         except Exception as exc:  # noqa: BLE001 - discovery must not block polling
             log.warning("discovery pass failed: %s", exc)
             discovered = 0
 
-        await tick(client, deliver_event_notification)
+        try:
+            await tick(client, deliver_event_notification)
+        except Exception:
+            log.exception("cron polling failed after fixture discovery")
+            raise
         return {"discovered": discovered}
     finally:
         await client.aclose()
