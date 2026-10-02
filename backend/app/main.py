@@ -13,6 +13,7 @@ from slowapi.middleware import SlowAPIMiddleware
 from app import db
 from app.config import settings
 from app.logging_conf import get_logger
+from app.polling_schema import ensure_polling_schema
 from app.queue import get_queue
 from app.rate_limit import limiter
 from app.redis_client import close_redis
@@ -26,6 +27,7 @@ log = get_logger("api")
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await db.connect()
+    await ensure_polling_schema()
     app.state.sports_client = SportsApiClient()
     app.state.queue = await get_queue()  # arq pool for enqueueing (unused by API today)
     log.info("API started on port %s", settings.api_port)

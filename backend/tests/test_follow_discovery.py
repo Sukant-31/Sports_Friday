@@ -11,6 +11,7 @@ from app.workers import discovery
 
 
 async def test_follow_discovers_fixtures_before_returning(monkeypatch):
+    monkeypatch.setattr(discovery.teams_repo, "mark_discovered", AsyncMock())
     team_id = uuid4()
     row = {"id": uuid4(), "team_id": team_id}
     monkeypatch.setattr(svc.teams_repo, "find_team_by_id", AsyncMock(
@@ -34,6 +35,7 @@ async def test_follow_discovers_fixtures_before_returning(monkeypatch):
 
 
 async def test_discovery_failure_preserves_follow(monkeypatch):
+    monkeypatch.setattr(discovery.teams_repo, "mark_discovered", AsyncMock())
     team_id = uuid4()
     row = {"id": uuid4(), "team_id": team_id}
     monkeypatch.setattr(svc.teams_repo, "find_team_by_id", AsyncMock(
@@ -59,9 +61,10 @@ async def test_unknown_team_does_not_discover_or_follow(monkeypatch):
     discover.assert_not_awaited()
 
 
-async def test_discovery_includes_ongoing_match_and_prefers_live_snapshot(monkeypatch):
+async def test_date_discovery_includes_ongoing_match(monkeypatch):
     client = MockSportsApiClient(build_timeline("ongoing"))
-    client.get_team_live_fixtures = AsyncMock(return_value=build_timeline("ongoing")[0][1])
+    client.get_team_fixtures = AsyncMock(return_value=build_timeline("ongoing")[0][1])
+    monkeypatch.setattr(discovery.teams_repo, "mark_discovered", AsyncMock())
     monkeypatch.setattr(discovery.teams_repo, "upsert_team", AsyncMock(
         side_effect=[{"id": uuid4()}, {"id": uuid4()}],
     ))

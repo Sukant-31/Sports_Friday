@@ -40,3 +40,6 @@ target-version = "py311"
 
 [tool.setuptools.packages.find]
 include = ["app*"]
+
+[tool.setuptools.package-data]
+app = ["sql/*.sql"]

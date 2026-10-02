@@ -22,7 +22,7 @@ def _data_warning(matches) -> str | None:
         if match["status"] != "live":
             continue
         polled = match.get("last_polled_at")
-        if polled is None or now - polled > timedelta(minutes=2):
+        if polled is None or now - polled > timedelta(seconds=settings.live_poll_interval_seconds + 120):
             return "Live scores may be out of date. Updates are delayed; showing the last saved data."
     return None
 

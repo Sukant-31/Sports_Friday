@@ -94,7 +94,7 @@ async def find_subscribed_teams() -> list[asyncpg.Record]:
     """Teams that at least one user follows — the set discovery pulls fixtures for."""
     return await db.fetch(
         """
-        SELECT DISTINCT t.id, t.external_id, t.name
+        SELECT DISTINCT t.id, t.external_id, t.name, t.last_discovered_at
         FROM teams t
         JOIN subscriptions s ON s.team_id = t.id
         """
@@ -102,4 +102,9 @@ async def find_subscribed_teams() -> list[asyncpg.Record]:
 
 
 async def find_teams_needing_name_repair() -> list[asyncpg.Record]:
-    return await db.fetch("SELECT id, external_id FROM teams WHERE name = external_id")
+    return await db.fetch("SELECT t.id, t.external_id FROM teams t WHERE t.name=t.external_id "
+                          "AND EXISTS (SELECT 1 FROM subscriptions s WHERE s.team_id=t.id)")
+
+
+async def mark_discovered(external_id: str) -> None:
+    await db.execute('UPDATE teams SET last_discovered_at=now() WHERE external_id=$1', external_id)

@@ -98,13 +98,14 @@ Both `backend/` and `frontend/` are separate Vercel projects.
 3. **Frontend**: update the `destination` in `frontend/vercel.json`'s rewrite
    to your backend's Vercel URL, then `vercel` inside `frontend/`.
 
-**Tradeoff**: Vercel has no always-on process, so there's no continuously
-running poller/notifier here — `/api/cron/poll` runs one discovery+poll+notify
-pass, triggered by Vercel Cron. Free (Hobby) plan crons run **once a day**, so
-live goal/card notifications become a once-daily state check instead of
-near-real-time. For real-time push, run the standalone poller/notifier (see
-"Getting started" above) on a host with a persistent process, e.g. via
-`deploy/render.yaml`.
+Vercel runs `/api/cron/poll` as a short DB-first invocation. The built-in
+Hobby daily cron remains a backup. For timely notifications, configure the
+existing external scheduler to invoke the same authenticated endpoint **every
+minute**, retaining its existing Authorization header. An invocation normally
+makes **zero provider requests** unless discovery or a relevant fixture is due.
+An every-two-hours schedule cannot deliver timely match updates. No scheduler
+or secret changes are needed in the code; changing the external interval is an
+account-side operation. A persistent worker can use the same polling policy.
 
 ## Notes
 
@@ -120,8 +121,8 @@ frontend/API on Vercel if desired, but run both worker commands on an always-on
 host with the **same database and Redis** as the API. Set `DATABASE_URL`,
 `REDIS_URL`, `JWT_SECRET`, `SPORTS_API_KEY`, and `VAPID_*` on the workers;
 use `PUSH_TRANSPORT=webpush`. Apply migrations before starting updated services.
-The poller checks every 20 seconds by default; sports-provider request quotas
-must accommodate the number of followed fixtures being polled.
+The worker checks database decisions every 20 seconds by default; provider
+requests follow the independent timing and shared budget described below.
 
 For a complete local backend (database, Redis, migrations, API, and both workers),
 configure `.env` as above, then run:
@@ -147,13 +148,86 @@ tags help the browser replace repeated alerts.
 
 ## Match discovery and data freshness
 
-Following a team immediately discovers both ongoing and upcoming fixtures.
-The dashboard retains finished matches for 24 hours after their final poll.
-Only live fixtures and scheduled fixtures within 15 minutes of kickoff (up to
-6 hours after kickoff) are polled every tick. Fixtures without a kickoff time
-are checked at most once an hour. Distant upcoming matches remain visible but
-are not repeatedly fetched. Live polling still consumes provider requests;
-the configured interval must fit your API plan.
+Following a team discovers today's ongoing and tomorrow's upcoming fixtures
+using global date feeds. Free-plan discovery defaults to those two dates;
+farther future schedules require provider access to those dates. Previously
+stored future fixtures remain available. Discovery is refreshed per team every
+six hours, and date responses are cached in PostgreSQL across invocations and
+teams. A fixture involving two followed teams is upserted once per pass.
+Discovery updates schedules without overwriting fresher scores/status.
+
+The default policy checks a fixture 15 minutes before kickoff, at most every
+15 minutes before kickoff. Once kickoff is due, it checks every three minutes.
+Live matches share one `GET /fixtures?live=all` request, including embedded
+events, regardless of how many teams are followed. Irrelevant fixtures in that
+feed are ignored. Fixtures missing from the live feed use one shared
+`GET /fixtures?date=YYYY-MM-DD` per date for kickoff/final-status confirmation.
+No `next`, `ids`, season filter, or per-team live requests are used by cron.
+
+Expected match duration is 120 minutes, followed by 30 minutes of grace.
+Confirmed finished fixtures stop immediately. Missing starts back off after
+15 minutes; unresolved final states back off to 30-minute checks, with a
+six-hour recovery horizon. Unknown kickoff times have low priority. The
+existing durable notification retry queue continues even when no fixture or
+API budget is available. The dashboard retains finished matches for 24 hours
+and flags stale live data after the configured interval plus two minutes.
+
+## Free-plan request budget and reporting
+
+`MAX_DAILY_API_REQUESTS=90` leaves a ten-request margin below the nominal Free
+quota. `API_PRIORITY_RESERVE=15` stops discovery, search, profile repairs, and
+medium/low priority checks at 75 estimated used requests. High priority
+live/near-kickoff/unresolved important states can use the final 15. All client
+HTTP attempts, including retries and ambiguous timeouts, reserve a request
+atomically in PostgreSQL before contacting the provider. Cached responses do
+not spend requests. Transaction-scoped advisory locks coordinate budgets,
+shared-feed fetches, and overlapping cron runs through Neon connection pooling.
+
+The guard uses a **rolling 24 hours**, not midnight UTC: API-Football resets
+accounts at their activation time. Provider remaining/limit headers add a
+conservative baseline for requests made before deployment or by other callers;
+they never lower the local rolling estimate. This can temporarily defer calls
+past a provider reset, deliberately favoring quota safety. Requests from tools
+outside the app cannot be prevented; the next provider response reconciles
+reported usage. Request rows older than 48 hours and expired response-cache
+rows are pruned without changing football or notification records.
+
+Typical estimates with eight followed teams and a one-minute cron:
+
+| Situation | Provider requests |
+|---|---|
+| Idle invocation, fresh discovery | 0 |
+| Discovery refresh, any number of followed teams | At most 2 shared date requests |
+| No match day | About 8/day for discovery |
+| One two-hour live window, including overlapping matches | About 40 live requests, plus discovery and kickoff/final checks; roughly 50–60/day |
+| Multiple non-overlapping live windows | Higher; the 90-request guard stops further requests |
+
+Searches, new follows, retries, postponed matches, and other API clients affect
+these estimates. A 100-request plan cannot guarantee immediate alerts for
+unlimited sequential matches. Date feeds may omit detailed event lists; final
+confirmation still detects score/status changes, but late cards cannot be
+recovered without provider event details. Browser display also depends on the
+browser/OS and push service; accepted delivery receipts are not display proof.
+
+Cron summaries include followed-team/stored/live/due counts, priorities,
+HTTP attempts/made/skipped/cache hits and skip reasons, estimated budget,
+events generated, committed recipient deliveries, failed notification
+operations, and safe error categories. Intentional skips return HTTP 200 with
+`nothing_due`, `budget_exhausted`, `priority_reserve`, or `skipped` (overlap).
+Real API, database, notification, and processing failures return HTTP 503 and
+an accurate partial/error summary. No exception messages or secrets appear in
+responses.
+
+Migration `008_intelligent_polling.sql` adds request accounting/cache tables,
+`teams.last_discovered_at`, and `matches.last_checked_at`. It is additive and
+idempotent. The API installs the packaged migration on startup when missing;
+the regular migration runner also records/applies it. The packaged SQL is
+checked against the canonical migration in tests.
+
+The authenticated, browser-owned `POST /api/push/test` remains available for
+future delivery troubleshooting, with its existing five-per-minute rate limit.
+No subscription, VAPID, service-worker, preference, recipient-selection, or
+delivery-tracking behavior has changed.
 
 Score increases produce one event per goal, including when provider event
 details are unavailable. Event identity survives reordered provider lists;

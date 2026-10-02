@@ -45,9 +45,9 @@ async def test_schema_upgrade_backfills_history_and_preserves_new_pending_events
         await conn.close()
 
 
-async def test_cron_route_recovers_missing_column_before_polling(monkeypatch):
+async def test_cron_route_recovers_missing_column_before_polling(monkeypatch, cron_runtime):
     conn = await legacy_connection()
-    client = AsyncMock()
+    client = cron_runtime()
     async def ensure():
         await _ensure_schema(conn)
     monkeypatch.setattr(settings, 'cron_secret', 'test-secret')

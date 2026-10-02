@@ -35,6 +35,9 @@ async def test_discovery_upserts_fixtures_for_subscribed_teams(infra):
     match_ext = f"disc-{run_id}"
     # A user follows the mock home team (external id "100").
     home = await teams_repo.upsert_team("100", "Home FC", "Demo League")
+    previous_refresh = (await db.fetchrow('SELECT last_discovered_at FROM teams WHERE id=$1',
+                                          home['id']))['last_discovered_at']
+    await db.execute('UPDATE teams SET last_discovered_at=NULL WHERE id=$1', home['id'])
     user = await users_repo.create_user(f"disc-{run_id}@example.com", "hash")
     await subs_repo.create_subscription(user["id"], home["id"], True, True, True)
 
@@ -58,5 +61,7 @@ async def test_discovery_upserts_fixtures_for_subscribed_teams(infra):
         pollable_ids = {m["external_id"] for m in await matches_repo.find_pollable_matches()}
         assert match_ext in pollable_ids
     finally:
+        await db.execute('UPDATE teams SET last_discovered_at=$2 WHERE id=$1',
+                         home['id'], previous_refresh)
         await db.execute("DELETE FROM users WHERE id = $1", user["id"])
         await db.execute("DELETE FROM matches WHERE external_id = $1", match_ext)

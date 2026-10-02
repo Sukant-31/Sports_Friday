@@ -2,6 +2,7 @@ from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock
 
 from app.sports_api.client import SportsApiClient
+from app.config import settings
 
 
 def fixture(fid, home, away, day):
@@ -10,6 +11,7 @@ def fixture(fid, home, away, day):
 
 
 async def test_free_discovery_filters_sorts_limits_and_shares_date_feeds(monkeypatch):
+    monkeypatch.setattr(settings, 'fixture_discovery_days', 7)
     client = SportsApiClient()
     now = datetime.now(timezone.utc)
     rows = [fixture(3, 7937, 2, now + timedelta(days=3)),
@@ -51,6 +53,7 @@ async def test_zero_fixture_limit_does_not_call_api(monkeypatch):
 
 async def test_free_date_boundary_preserves_fixtures_and_is_shared(monkeypatch):
     from app.sports_api.client import SportsApiError
+    monkeypatch.setattr(settings, 'fixture_discovery_days', 7)
     client = SportsApiClient()
     now = datetime.now(timezone.utc)
     tomorrow = fixture(1, 7937, 529, now + timedelta(days=1))
@@ -75,5 +78,55 @@ async def test_non_date_errors_are_not_hidden(monkeypatch):
     try:
         with pytest.raises(SportsApiError, match='quota exceeded'):
             await client.get_team_fixtures('7937', 10)
+    finally:
+        await client.aclose()
+
+
+async def test_default_free_window_only_fetches_today_and_tomorrow(monkeypatch):
+    monkeypatch.setattr(settings, 'fixture_discovery_days', 2)
+    client = SportsApiClient()
+    fetch = AsyncMock(return_value={'response': []})
+    monkeypatch.setattr(client, '_request', fetch)
+    try:
+        for team in range(8):
+            await client.get_team_fixtures(str(team), 10)
+        assert fetch.await_count == 2
+        assert all(set(call.args[1]) == {'date'} for call in fetch.await_args_list)
+    finally:
+        await client.aclose()
+
+
+async def test_failed_discovery_feed_is_not_refetched_for_every_team(monkeypatch):
+    import pytest
+    from app.sports_api.client import SportsApiError
+    client = SportsApiClient()
+    fetch = AsyncMock(side_effect=SportsApiError('upstream unavailable', 503))
+    monkeypatch.setattr(client, '_request', fetch)
+    try:
+        for team in range(8):
+            with pytest.raises(SportsApiError):
+                await client.get_team_fixtures(str(team), 10)
+        assert fetch.await_count == 1
+        client.begin_fixture_discovery()
+        with pytest.raises(SportsApiError):
+            await client.get_team_fixtures('0', 10)
+        assert fetch.await_count == 2
+    finally:
+        await client.aclose()
+
+
+async def test_later_feed_failure_keeps_matching_earlier_results(monkeypatch):
+    import pytest
+    from app.sports_api.client import PartialFixtureDiscovery, SportsApiError
+    client = SportsApiClient()
+    today = fixture(1, 7937, 529, datetime.now(timezone.utc))
+    fetch = AsyncMock(side_effect=[{'response': [today]}, SportsApiError('outage', 503)])
+    monkeypatch.setattr(client, '_request', fetch)
+    try:
+        for team in ('7937', '529'):
+            with pytest.raises(PartialFixtureDiscovery) as caught:
+                await client.get_team_fixtures(team, 10)
+            assert caught.value.fixtures['response'] == [today]
+        assert fetch.await_count == 2
     finally:
         await client.aclose()

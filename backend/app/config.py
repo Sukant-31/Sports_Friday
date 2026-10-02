@@ -48,6 +48,17 @@ class Settings(BaseSettings):
     discover_interval_seconds: int = Field(3600, alias="DISCOVER_INTERVAL_SECONDS")
     # How many upcoming fixtures to pull per team on each discovery pass.
     fixtures_lookahead: int = Field(10, alias="FIXTURES_LOOKAHEAD")
+    max_daily_api_requests: int = Field(90, ge=1, le=100, alias="MAX_DAILY_API_REQUESTS")
+    api_priority_reserve: int = Field(15, ge=0, alias="API_PRIORITY_RESERVE")
+    live_poll_interval_seconds: int = Field(180, ge=30, alias="LIVE_POLL_INTERVAL_SECONDS")
+    pre_match_window_minutes: int = Field(15, ge=0, alias="PRE_MATCH_WINDOW_MINUTES")
+    pre_match_poll_interval_seconds: int = Field(900, ge=30, alias="PRE_MATCH_POLL_INTERVAL_SECONDS")
+    expected_match_minutes: int = Field(120, ge=90, alias="EXPECTED_MATCH_MINUTES")
+    post_match_grace_minutes: int = Field(30, ge=0, alias="POST_MATCH_GRACE_MINUTES")
+    status_recovery_hours: int = Field(6, ge=1, alias="STATUS_RECOVERY_HOURS")
+    unresolved_poll_interval_seconds: int = Field(1800, ge=60, alias="UNRESOLVED_POLL_INTERVAL_SECONDS")
+    fixture_discovery_days: int = Field(2, ge=1, le=7, alias="FIXTURE_DISCOVERY_DAYS")
+    fixture_discovery_refresh_seconds: int = Field(21600, ge=300, alias="FIXTURE_DISCOVERY_REFRESH_SECONDS")
     cors_origin: str = Field("http://localhost:5173", alias="CORS_ORIGIN")
     # Shared secret Vercel Cron sends as "Authorization: Bearer <value>" so
     # /api/cron/poll can't be triggered by anyone else. Vercel sets this

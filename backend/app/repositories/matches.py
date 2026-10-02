@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncpg
 
 from app import db
+from app.config import settings
 
 
 async def find_pollable_matches() -> list[asyncpg.Record]:
@@ -10,26 +11,24 @@ async def find_pollable_matches() -> list[asyncpg.Record]:
     return await db.fetch(
         """
         SELECT DISTINCT m.id, m.external_id, m.status, m.home_score, m.away_score,
-               m.home_team_id, m.away_team_id, m.starts_at, m.last_polled_at
+               m.home_team_id, m.away_team_id, m.starts_at, m.last_polled_at, m.last_checked_at
         FROM matches m
         WHERE (
             m.status = 'live'
             OR (
                 m.status = 'scheduled'
-                AND m.starts_at BETWEEN now() - INTERVAL '6 hours'
-                                    AND now() + INTERVAL '15 minutes'
+                AND m.starts_at BETWEEN now() - $1*INTERVAL '1 hour'
+                                    AND now() + $2*INTERVAL '1 minute'
             )
             OR (
                 m.status = 'scheduled' AND m.starts_at IS NULL
-                AND (m.last_polled_at IS NULL
-                     OR m.last_polled_at < now() - INTERVAL '1 hour')
             )
           )
           AND (
             EXISTS (SELECT 1 FROM subscriptions s WHERE s.team_id = m.home_team_id)
             OR EXISTS (SELECT 1 FROM subscriptions s WHERE s.team_id = m.away_team_id)
           )
-        """
+        """, settings.status_recovery_hours, settings.pre_match_window_minutes
     )
 
 
@@ -85,7 +84,7 @@ async def update_match_state(
         """
         UPDATE matches
         SET status = $2, home_score = $3, away_score = $4, minute = $5,
-            last_polled_at = now()
+            last_polled_at = now(), last_checked_at = now()
         WHERE id = $1
         RETURNING *
         """,
@@ -95,6 +94,20 @@ async def update_match_state(
         away_score,
         minute,
     )
+
+
+async def mark_checked(match_id) -> None:
+    await db.execute('UPDATE matches SET last_checked_at=now() WHERE id=$1', match_id)
+
+
+async def polling_counts() -> dict:
+    row = await db.fetchrow("""
+        SELECT count(*)::int AS stored_fixtures,
+               count(*) FILTER (WHERE m.status='live')::int AS live_fixtures
+        FROM matches m WHERE EXISTS (
+            SELECT 1 FROM subscriptions s WHERE s.team_id IN (m.home_team_id,m.away_team_id))
+        """)
+    return dict(row)
 
 
 async def find_live_matches_for_user(user_id) -> list[asyncpg.Record]:

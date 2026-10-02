@@ -39,7 +39,8 @@ def test_live_data_warning_distinguishes_fresh_stale_and_missing_configuration(m
     now = datetime.now(timezone.utc)
     assert _data_warning([{"status": "live", "last_polled_at": now}]) is None
     assert "out of date" in _data_warning([
-        {"status": "live", "last_polled_at": now - timedelta(minutes=3)},
+        {"status": "live", "last_polled_at": now - timedelta(
+            seconds=settings.live_poll_interval_seconds + 121)},
     ])
     monkeypatch.setattr(settings, "sports_api_key", "")
     assert "not configured" in _data_warning([])
@@ -59,15 +60,44 @@ async def test_name_repair_uses_matching_verified_profile(monkeypatch):
     upsert.assert_awaited_once_with("100", "Home FC", None)
 
 
-async def test_partial_discovery_failure_keeps_available_live_fixture(monkeypatch):
-    from app.sports_api.mock import build_timeline
+async def test_discovery_failure_does_not_fall_back_to_per_team_live_calls(monkeypatch):
     client = SimpleNamespace(
-        get_team_live_fixtures=AsyncMock(return_value=build_timeline("live")[0][1]),
+        get_team_live_fixtures=AsyncMock(),
         get_team_fixtures=AsyncMock(side_effect=SportsApiError("plan restriction")),
     )
-    monkeypatch.setattr(discovery.teams_repo, "upsert_team", AsyncMock(return_value={"id": "team"}))
-    upsert = AsyncMock()
-    monkeypatch.setattr(discovery.matches_repo, "upsert_match", upsert)
     with pytest.raises(SportsApiError, match="plan restriction"):
         await discovery.discover_team(client, "100")
-    assert upsert.await_args.args[3] == "live"
+    client.get_team_live_fixtures.assert_not_awaited()
+
+
+async def test_partial_date_discovery_persists_available_fixtures_and_reports_failure(monkeypatch):
+    from app.sports_api.client import PartialFixtureDiscovery
+    from app.sports_api.mock import build_timeline
+    raw = build_timeline('live')[0][1]['response'][0]
+    raw['fixture']['date'] = datetime.now(timezone.utc).isoformat()
+    error = PartialFixtureDiscovery(SportsApiError('outage', 503), {'live': raw}, 10)
+    client = SimpleNamespace(get_team_fixtures=AsyncMock(side_effect=error))
+    monkeypatch.setattr(discovery.teams_repo, 'upsert_team', AsyncMock(return_value={'id': 'team'}))
+    upsert = AsyncMock()
+    refreshed = AsyncMock()
+    monkeypatch.setattr(discovery.matches_repo, 'upsert_match', upsert)
+    monkeypatch.setattr(discovery.teams_repo, 'mark_discovered', refreshed)
+    with pytest.raises(PartialFixtureDiscovery):
+        await discovery.discover_team(client, '100')
+    assert upsert.await_args.args[3] == 'live'
+    refreshed.assert_not_awaited()
+
+
+async def test_budget_skip_keeps_partial_discovery_without_reporting_api_failure(monkeypatch):
+    from app.sports_api.client import ApiRequestSkipped, PartialFixtureDiscovery
+    from app.sports_api.mock import build_timeline
+    raw = build_timeline('live')[0][1]['response'][0]
+    raw['fixture']['date'] = datetime.now(timezone.utc).isoformat()
+    error = PartialFixtureDiscovery(ApiRequestSkipped('priority_reserve'), {'live': raw}, 10)
+    client = SimpleNamespace(get_team_fixtures=AsyncMock(side_effect=error))
+    monkeypatch.setattr(discovery.teams_repo, 'upsert_team', AsyncMock(return_value={'id': 'team'}))
+    upsert = AsyncMock()
+    monkeypatch.setattr(discovery.matches_repo, 'upsert_match', upsert)
+    with pytest.raises(ApiRequestSkipped):
+        await discovery.discover_team(client, '100')
+    upsert.assert_awaited_once()
