@@ -50,11 +50,22 @@ def test_short_queries_do_not_fuzzy_match():
     assert match_rank('Arsenal', 'ax') is None
 
 
-async def test_empty_query_never_calls_database_or_provider(monkeypatch):
+@pytest.mark.parametrize('query', [' ', 'b', 'ba', '  ba  ', '!!'])
+async def test_short_query_never_calls_database_or_provider(monkeypatch, query):
     cached = AsyncMock()
     monkeypatch.setattr(team_service.teams_repo, 'search_teams_cached', cached)
-    assert await team_service.search_teams(None, ' ') == {'teams': [], 'warning': None}
+    assert await team_service.search_teams(None, query) == {'teams': [], 'warning': None}
     cached.assert_not_awaited()
+
+
+async def test_short_provider_token_uses_cache_without_calling_provider(monkeypatch):
+    saved = teams(['FC Barcelona'])
+    monkeypatch.setattr(team_service.teams_repo, 'search_teams_cached', AsyncMock(return_value=saved))
+    client = SimpleNamespace(search_teams=AsyncMock())
+    request = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(sports_client=client)))
+    result = await team_service.search_teams(request, 'fc ba')
+    assert result == {'teams': saved, 'warning': None}
+    client.search_teams.assert_not_awaited()
 
 
 async def test_provider_merge_is_ranked_and_deduplicated(monkeypatch):

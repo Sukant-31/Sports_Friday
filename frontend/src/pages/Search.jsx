@@ -45,7 +45,7 @@ export default function Search() {
     setWarning(null);
     setSearched(false);
     setResults([]);
-    if (query.length < 2) return;
+    if (query.length < 3) return;
     const timer = setTimeout(() => search(query, id), 350);
     debounce.current = timer;
     return () => {
@@ -70,7 +70,7 @@ export default function Search() {
       select(suggestions[active]);
       return;
     }
-    if (q.trim().length < 2) return;
+    if (q.trim().length < 3) return;
     clearTimeout(debounce.current);
     setOpen(false);
     search(q.trim(), ++requestId.current);
@@ -109,6 +109,7 @@ export default function Search() {
             ref={input}
             role="combobox"
             aria-label="Search teams"
+            aria-describedby="team-search-status"
             aria-autocomplete="list"
             aria-expanded={open && suggestions.length > 0}
             aria-controls="team-suggestions"
@@ -129,12 +130,12 @@ export default function Search() {
             ))}
           </ul>
         </div>
-        <button type="submit" disabled={loading}>{loading ? 'Searching…' : 'Search'}</button>
+        <button type="submit" disabled={loading || q.trim().length < 3}>{loading ? 'Searching…' : 'Search'}</button>
       </form>
       {error && <p className="error">{error}</p>}
       {warning && <p role="status" className="muted">{warning}</p>}
-      <p role="status" className="muted">
-        {loading ? 'Searching teams…' : searched && results.length === 0 && !error ? 'No matching teams. Try another name.' : ''}
+      <p id="team-search-status" role="status" className="muted">
+        {q.trim().length < 3 ? 'Type at least 3 characters.' : loading ? 'Searching teams…' : searched && results.length === 0 && !error ? 'No matching teams. Try another name.' : ''}
       </p>
       <div className="grid">
         {results.map((t) => (

@@ -15,7 +15,7 @@ async def search_teams(request: Request, q: str) -> dict:
     """Search-then-cache: serve from the local cache when it's rich enough,
     otherwise hit the sports API and upsert results into the teams table."""
     q = normalize_query(q)
-    if len(q) < 2:
+    if len(q) < 3:
         return {"teams": [], "warning": None}
     cached = await teams_repo.search_teams_cached(q)
     ranked_cached = rank_teams(cached, q)
@@ -26,6 +26,8 @@ async def search_teams(request: Request, q: str) -> dict:
     try:
         # Provider searches can be literal; a broad token also discovers abbreviated names.
         provider_query = max(q.split(), key=len) if len(q.split()) > 1 else q
+        if len(provider_query) < 3:
+            return {"teams": ranked_cached, "warning": None}
         api_response = await client.search_teams(provider_query)
         normalized = normalize.normalize_team_search(api_response)
         upserted = [
