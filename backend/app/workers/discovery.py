@@ -35,10 +35,14 @@ async def discover(client) -> int:
         log.debug("no subscribed teams to discover fixtures for")
         return 0
 
+    # A persistent client must not reuse yesterday's or a previous pass's feed.
+    if hasattr(client, "begin_fixture_discovery"):
+        client.begin_fixture_discovery()
+
     upserted = 0
     for team in teams:
         try:
-            upserted += await discover_team(client, team["external_id"])
+            upserted += await discover_team(client, team["external_id"], refresh=False)
         except SportsApiError as exc:
             log.warning("fixture discovery failed for team %s: %s", team["external_id"], exc)
 
@@ -64,8 +68,10 @@ async def repair_team_names(client) -> int:
     return repaired
 
 
-async def discover_team(client, external_id: str) -> int:
+async def discover_team(client, external_id: str, *, refresh: bool = True) -> int:
     """Discover fixtures for one team, including immediately after a follow."""
+    if refresh and hasattr(client, "begin_fixture_discovery"):
+        client.begin_fixture_discovery()
     fixtures = {}
     failure = None
     # Try both endpoints even if one is unavailable on the provider's plan.

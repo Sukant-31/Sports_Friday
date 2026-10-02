@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import asyncio
 import time
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 import httpx
@@ -20,9 +21,10 @@ _BREAKER_COOLDOWN_S = 30.0
 
 
 class SportsApiError(Exception):
-    def __init__(self, message: str, status_code: int = 0) -> None:
+    def __init__(self, message: str, status_code: int = 0, *, errors: dict | None = None) -> None:
         super().__init__(message)
         self.status_code = status_code
+        self.errors = errors or {}
 
 
 _RAPIDAPI_BASE = "https://api-football-v1.p.rapidapi.com/v3"
@@ -61,6 +63,8 @@ class SportsApiClient:
         )
         self._consecutive_failures = 0
         self._breaker_open_until = 0.0
+        self._fixtures_by_date: dict[str, dict[str, Any]] = {}
+        self._fixtures_date_limit: str | None = None
 
     async def aclose(self) -> None:
         await self._client.aclose()
@@ -79,7 +83,8 @@ class SportsApiClient:
                 resp.raise_for_status()
                 data = resp.json()
                 if data.get("errors"):
-                    raise SportsApiError(f"Sports API rejected request: {data['errors']}")
+                    raise SportsApiError(f"Sports API rejected request: {data['errors']}",
+                                         errors=data['errors'])
                 self._consecutive_failures = 0
                 return data
             except (SportsApiError, httpx.HTTPError) as exc:
@@ -87,7 +92,8 @@ class SportsApiClient:
                 retriable = status_code == 429 or status_code >= 500
                 if not retriable or attempt == _MAX_RETRIES:
                     self._register_failure()
-                    raise SportsApiError(str(exc), status_code) from exc
+                    raise SportsApiError(str(exc), status_code,
+                                         errors=getattr(exc, "errors", None)) from exc
                 delay = 0.5 * (2**attempt)  # 0.5s, 1s, 2s
                 log.debug("retrying %s after %.1fs (attempt %d)", path, delay, attempt)
                 await asyncio.sleep(delay)
@@ -116,7 +122,44 @@ class SportsApiClient:
         return await self._request("/fixtures", {"team": team_external_id, "live": "all"})
 
     async def get_team_fixtures(self, team_external_id: str, count: int) -> dict[str, Any]:
-        """Upcoming fixtures for a team (used by discovery to populate matches)."""
-        return await self._request(
-            "/fixtures", {"team": team_external_id, "next": count}
-        )
+        """Nearest fixtures in the next seven UTC dates, without paid filters.
+
+        Team + date/from/to requires a season, which can also be blocked on
+        Free. The global date feed works without a season. Share each feed
+        across followed teams for this discovery pass to limit API usage.
+        """
+        if count <= 0:
+            return {"response": [], "results": 0}
+        now = datetime.now(timezone.utc)
+        fixtures = {}
+        for offset in range(7):
+            day = (now.date() + timedelta(days=offset)).isoformat()
+            if self._fixtures_date_limit is not None and day >= self._fixtures_date_limit:
+                break
+            if day not in self._fixtures_by_date:
+                try:
+                    self._fixtures_by_date[day] = await self._request("/fixtures", {"date": day})
+                except SportsApiError as exc:
+                    # Free permits a short rolling window. Keep valid dates and
+                    # stop at its boundary; never hide quota/auth/network errors.
+                    plan = str(exc.errors.get("plan", ""))
+                    if self._fixtures_by_date and "Free plans do not have access to this date" in plan:
+                        self._fixtures_date_limit = day
+                        break
+                    raise
+            for fixture in self._fixtures_by_date[day].get("response", []):
+                teams = fixture.get("teams", {})
+                if not any(str(teams.get(side, {}).get("id")) == str(team_external_id)
+                           for side in ("home", "away")):
+                    continue
+                info = fixture["fixture"]
+                kickoff = datetime.fromisoformat(info["date"].replace("Z", "+00:00"))
+                if kickoff >= now:
+                    fixtures[info["id"]] = fixture
+        upcoming = sorted(fixtures.values(), key=lambda fx: fx["fixture"]["date"])[:count]
+        return {"response": upcoming, "results": len(upcoming)}
+
+    def begin_fixture_discovery(self) -> None:
+        """Refresh date feeds each pass, including in the persistent poller."""
+        self._fixtures_by_date.clear()
+        self._fixtures_date_limit = None
