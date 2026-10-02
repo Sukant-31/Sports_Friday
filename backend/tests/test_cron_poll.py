@@ -70,6 +70,7 @@ async def test_cron_reports_notification_failure_even_when_retry_succeeds(monkey
 
 async def test_partial_failure_returns_503_with_summary(monkeypatch, cron_runtime):
     import httpx
+
     from app import main
     from app.config import settings
     from app.workers.run_report import RunReport

@@ -11,15 +11,14 @@ async def _used(conn, scope: str) -> int:
 
 
 async def reserve(scope: str, limit: int) -> bool:
-    async with db.pool().acquire() as conn:
-        async with conn.transaction():
-            await conn.execute('SELECT pg_advisory_xact_lock(hashtext($1))', 'budget:' + scope)
-            if await _used(conn, scope) >= limit:
-                return False
-            await conn.execute('INSERT INTO sports_api_requests(scope) VALUES ($1)', scope)
-            await conn.execute("DELETE FROM sports_api_requests WHERE scope=$1 "
-                               "AND requested_at < clock_timestamp()-INTERVAL '48 hours'", scope)
-            return True
+    async with db.pool().acquire() as conn, conn.transaction():
+        await conn.execute('SELECT pg_advisory_xact_lock(hashtext($1))', 'budget:' + scope)
+        if await _used(conn, scope) >= limit:
+            return False
+        await conn.execute('INSERT INTO sports_api_requests(scope) VALUES ($1)', scope)
+        await conn.execute("DELETE FROM sports_api_requests WHERE scope=$1 "
+                           "AND requested_at < clock_timestamp()-INTERVAL '48 hours'", scope)
+        return True
 
 
 async def reconcile(scope: str, provider_used: int) -> None:
@@ -28,13 +27,12 @@ async def reconcile(scope: str, provider_used: int) -> None:
     The provider reset is account-specific. Baseline units expire only after
     24 hours, so midnight or a larger remaining header cannot reset our guard.
     """
-    async with db.pool().acquire() as conn:
-        async with conn.transaction():
-            await conn.execute('SELECT pg_advisory_xact_lock(hashtext($1))', 'budget:' + scope)
-            debt = provider_used - await _used(conn, scope)
-            if debt > 0:
-                await conn.execute("INSERT INTO sports_api_requests(scope,units,kind) "
-                                   "VALUES ($1,$2,'provider_baseline')", scope, debt)
+    async with db.pool().acquire() as conn, conn.transaction():
+        await conn.execute('SELECT pg_advisory_xact_lock(hashtext($1))', 'budget:' + scope)
+        debt = provider_used - await _used(conn, scope)
+        if debt > 0:
+            await conn.execute("INSERT INTO sports_api_requests(scope,units,kind) "
+                               "VALUES ($1,$2,'provider_baseline')", scope, debt)
 
 
 async def budget(scope: str, limit: int) -> dict:
@@ -65,10 +63,9 @@ async def cache(scope: str, key: str, payload: dict) -> None:
 
 @asynccontextmanager
 async def lock(scope: str, name: str):
-    async with db.pool().acquire() as conn:
-        # Transaction-scoped locks also work through Neon's transaction pooler.
-        # Session locks can outlive their owner on a pooled connection.
-        async with conn.transaction():
-            held = await conn.fetchval('SELECT pg_try_advisory_xact_lock(hashtext($1))',
-                                       name + ':' + scope)
-            yield held
+    # Transaction-scoped locks also work through Neon's transaction pooler.
+    # Session locks can outlive their owner on a pooled connection.
+    async with db.pool().acquire() as conn, conn.transaction():
+        held = await conn.fetchval('SELECT pg_try_advisory_xact_lock(hashtext($1))',
+                                   name + ':' + scope)
+        yield held

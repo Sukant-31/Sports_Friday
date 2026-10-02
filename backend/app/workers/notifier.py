@@ -7,7 +7,7 @@ Run:  arq app.workers.notifier.WorkerSettings
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, ClassVar
 from uuid import UUID
 
 from app import db
@@ -80,7 +80,7 @@ async def deliver_event_notification(payload: dict[str, Any]) -> None:
                     )
                 except Exception as exc:
                     failure = exc
-                    log.warning("push failed for event %s: %s", event_id, exc)
+                    log.warning("push failed for event %s: %s", event_id, exc, exc_info=True)
             if failure is None:
                 await conn.execute(
                     "UPDATE match_events SET delivered_at=now() WHERE id=$1", event_id
@@ -106,7 +106,7 @@ async def _shutdown(ctx: dict) -> None:
 
 
 class WorkerSettings:
-    functions = [notify_match_event]
+    functions: ClassVar[list] = [notify_match_event]
     on_startup = _startup
     on_shutdown = _shutdown
     redis_settings = redis_settings()

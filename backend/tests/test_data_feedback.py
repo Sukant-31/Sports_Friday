@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -36,7 +36,7 @@ async def test_search_outage_preserves_cache_with_warning(monkeypatch):
 
 def test_live_data_warning_distinguishes_fresh_stale_and_missing_configuration(monkeypatch):
     monkeypatch.setattr(settings, "sports_api_key", "test")
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     assert _data_warning([{"status": "live", "last_polled_at": now}]) is None
     assert "out of date" in _data_warning([
         {"status": "live", "last_polled_at": now - timedelta(
@@ -74,7 +74,7 @@ async def test_partial_date_discovery_persists_available_fixtures_and_reports_fa
     from app.sports_api.client import PartialFixtureDiscovery
     from app.sports_api.mock import build_timeline
     raw = build_timeline('live')[0][1]['response'][0]
-    raw['fixture']['date'] = datetime.now(timezone.utc).isoformat()
+    raw['fixture']['date'] = datetime.now(UTC).isoformat()
     error = PartialFixtureDiscovery(SportsApiError('outage', 503), {'live': raw}, 10)
     client = SimpleNamespace(get_team_fixtures=AsyncMock(side_effect=error))
     monkeypatch.setattr(discovery.teams_repo, 'upsert_team', AsyncMock(return_value={'id': 'team'}))
@@ -92,7 +92,7 @@ async def test_budget_skip_keeps_partial_discovery_without_reporting_api_failure
     from app.sports_api.client import ApiRequestSkipped, PartialFixtureDiscovery
     from app.sports_api.mock import build_timeline
     raw = build_timeline('live')[0][1]['response'][0]
-    raw['fixture']['date'] = datetime.now(timezone.utc).isoformat()
+    raw['fixture']['date'] = datetime.now(UTC).isoformat()
     error = PartialFixtureDiscovery(ApiRequestSkipped('priority_reserve'), {'live': raw}, 10)
     client = SimpleNamespace(get_team_fixtures=AsyncMock(side_effect=error))
     monkeypatch.setattr(discovery.teams_repo, 'upsert_team', AsyncMock(return_value={'id': 'team'}))

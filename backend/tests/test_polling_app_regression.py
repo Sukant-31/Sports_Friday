@@ -1,5 +1,5 @@
 """Exercise existing authenticated app flows against the migrated local DB."""
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 from uuid import UUID, uuid4
@@ -22,7 +22,7 @@ async def test_auth_search_follow_preferences_match_and_push_subscription(monkey
     match_ext = 'match-' + run
     raw = build_timeline(match_ext)[0][1]
     fixture = raw['response'][0]
-    fixture['fixture']['date'] = datetime.now(timezone.utc).isoformat()
+    fixture['fixture']['date'] = datetime.now(UTC).isoformat()
     fixture['teams']['home'].update(id=home_ext, name=team_name)
     fixture['teams']['away'].update(id=away_ext, name='Away ' + run)
     app = create_app()

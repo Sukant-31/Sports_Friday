@@ -4,10 +4,10 @@ a small circuit breaker so a sustained outage stops hammering the API."""
 from __future__ import annotations
 
 import asyncio
-import time
 import hashlib
 import json
-from datetime import datetime, timedelta, timezone
+import time
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import httpx
@@ -210,7 +210,7 @@ class SportsApiClient:
         """
         if count <= 0:
             return {"response": [], "results": 0}
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         fixtures = {}
         for offset in range(settings.fixture_discovery_days):
             day = (now.date() + timedelta(days=offset)).isoformat()
@@ -241,7 +241,7 @@ class SportsApiClient:
                            for side in ("home", "away")):
                     continue
                 info = fixture["fixture"]
-                kickoff = datetime.fromisoformat(info["date"].replace("Z", "+00:00"))
+                kickoff = datetime.fromisoformat(info["date"])
                 if kickoff.date() >= now.date():
                     fixtures[info["id"]] = fixture
         upcoming = sorted(fixtures.values(), key=lambda fx: fx["fixture"]["date"])[:count]

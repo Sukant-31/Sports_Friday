@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
@@ -19,7 +20,7 @@ log = get_logger('push')
 @router.post('/test')
 @limiter.limit('5/minute')
 async def test_notification(request: Request, body: PushUnsubscribe,
-                            user_id: UUID = Depends(get_current_user_id)) -> dict:
+                            user_id: Annotated[UUID, Depends(get_current_user_id)]) -> dict:
     target = await push_repo.find_subscription_for_user(user_id, body.endpoint)
     if target is None:
         raise HTTPException(404, 'No saved push subscription for this browser and account.')
@@ -48,7 +49,7 @@ async def vapid_public_key() -> dict:
 
 @router.post("/subscribe", status_code=status.HTTP_201_CREATED)
 async def subscribe(
-    body: PushSubscribe, user_id: UUID = Depends(get_current_user_id)
+    body: PushSubscribe, user_id: Annotated[UUID, Depends(get_current_user_id)]
 ) -> dict:
     await push_repo.upsert_push_subscription(
         user_id, body.endpoint, body.keys.p256dh, body.keys.auth
@@ -58,7 +59,7 @@ async def subscribe(
 
 @router.delete("/subscribe", status_code=status.HTTP_204_NO_CONTENT)
 async def unsubscribe(
-    body: PushUnsubscribe, user_id: UUID = Depends(get_current_user_id)
+    body: PushUnsubscribe, user_id: Annotated[UUID, Depends(get_current_user_id)]
 ) -> Response:
     await push_repo.delete_push_subscription_by_endpoint(user_id, body.endpoint)
     return Response(status_code=status.HTTP_204_NO_CONTENT)

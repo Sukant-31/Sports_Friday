@@ -4,10 +4,10 @@ from uuid import UUID
 
 from fastapi import HTTPException, status
 
+from app.logging_conf import get_logger
 from app.repositories import subscriptions as subs_repo
 from app.repositories import teams as teams_repo
 from app.schemas import SubscriptionCreate, SubscriptionUpdate
-from app.logging_conf import get_logger
 from app.workers.discovery import discover_team
 
 log = get_logger("subscription_service")
@@ -34,7 +34,7 @@ async def create(user_id: UUID, payload: SubscriptionCreate, client) -> dict:
     try:
         await discover_team(client, team["external_id"])
     except Exception as exc:
-        log.warning("initial fixture discovery failed for team %s: %s", team["external_id"], exc)
+        log.warning("initial fixture discovery failed for team %s: %s", team["external_id"], exc, exc_info=True)
         warning = "Team followed, but fixtures could not be refreshed. We will retry automatically."
     return {**dict(row), "warning": warning}
 

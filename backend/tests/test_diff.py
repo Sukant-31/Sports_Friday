@@ -1,7 +1,7 @@
 """Pure unit tests for the core event-detection logic. No DB, no live match."""
 
-from app.workers.diff import diff_match
 from app.workers.dedup_key import dedup_key
+from app.workers.diff import diff_match
 
 BASE = {
     "status": "live",

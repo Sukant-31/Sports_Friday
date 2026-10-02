@@ -3,16 +3,15 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from app.services.team_search import match_rank, rank_teams
 from app.services import team_service
-
+from app.services.team_search import match_rank, rank_teams
 
 NAMES = ['Manchester United', 'Manchester City', 'FC United of Manchester',
          'Leeds United', 'Newcastle United', 'West Ham United', 'Sheffield United']
 
 
 def teams(names=NAMES):
-    return [dict(id=str(i), external_id=str(i), name=name) for i, name in enumerate(names)]
+    return [{"id": str(i), "external_id": str(i), "name": name} for i, name in enumerate(names)]
 
 
 @pytest.mark.parametrize('query,expected', [
@@ -84,6 +83,7 @@ async def test_provider_merge_is_ranked_and_deduplicated(monkeypatch):
 async def test_repository_candidates_on_postgres(monkeypatch):
     """Use a temporary catalogue to test the real SQL in isolation."""
     import asyncpg
+
     from app.config import settings
     from app.repositories import teams as repo
 
@@ -128,6 +128,7 @@ def test_multiword_typo_requires_each_word():
 
 async def test_missing_trigram_extension_falls_back_to_standard_sql(monkeypatch):
     import asyncpg
+
     from app.repositories import teams as repo
 
     fetch = AsyncMock(side_effect=[asyncpg.UndefinedFunctionError('operator does not exist'), teams()])
@@ -142,6 +143,7 @@ async def test_missing_trigram_extension_falls_back_to_standard_sql(monkeypatch)
 
 async def test_other_database_errors_are_not_hidden(monkeypatch):
     import asyncpg
+
     from app.repositories import teams as repo
 
     fetch = AsyncMock(side_effect=asyncpg.UndefinedTableError('teams missing'))
@@ -154,8 +156,10 @@ async def test_other_database_errors_are_not_hidden(monkeypatch):
 async def test_authenticated_search_without_trigram_extension(monkeypatch):
     """Reproduce production's missing operators through the real HTTP route."""
     import uuid
+
     import asyncpg
     import httpx
+
     from app.config import settings
     from app.deps import get_current_user_id
     from app.main import create_app

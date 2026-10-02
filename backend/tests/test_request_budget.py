@@ -102,6 +102,7 @@ async def test_provider_headers_include_other_consumers_without_resetting_local_
 
 async def test_each_http_retry_counts_as_one_request(budget_scope, monkeypatch):
     from unittest.mock import AsyncMock
+
     from app.sports_api import client as module
     monkeypatch.setattr(module.asyncio, 'sleep', AsyncMock())
     client = await fake_client(budget_scope, lambda request: httpx.Response(503, json={}))
@@ -171,6 +172,7 @@ async def test_polling_migration_is_packaged_and_idempotent(budget_scope):
 
 async def test_budget_stopped_retry_does_not_hide_upstream_failure(budget_scope, monkeypatch):
     from unittest.mock import AsyncMock
+
     from app.sports_api import client as module
     monkeypatch.setattr(module.asyncio, 'sleep', AsyncMock())
     monkeypatch.setattr(settings, 'max_daily_api_requests', 1)

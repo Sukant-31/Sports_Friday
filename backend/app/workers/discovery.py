@@ -6,7 +6,7 @@ the free API tier has a tight daily request budget.
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from app.config import settings
 from app.logging_conf import get_logger
@@ -45,7 +45,7 @@ async def discover(client, *, report: RunReport | None = None) -> int:
     seen = set()
     for team in teams:
         refreshed = team.get('last_discovered_at')
-        if refreshed and datetime.now(timezone.utc) - refreshed < timedelta(
+        if refreshed and datetime.now(UTC) - refreshed < timedelta(
                 seconds=settings.fixture_discovery_refresh_seconds):
             continue
         try:

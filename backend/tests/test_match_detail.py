@@ -4,7 +4,7 @@ without it. Assumes migrations applied."""
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 import pytest_asyncio
@@ -68,7 +68,7 @@ async def test_dashboard_retention_polling_window_and_distinct_goals(infra):
     away = await T.upsert_team(f"away-{rid}", "Away United", "Demo League")
     user = await U.create_user(f"dashboard-{rid}@example.com", "hash")
     match_ids = []
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     try:
         await S.create_subscription(user["id"], home["id"], True, True, True)
         fixtures = {}

@@ -10,11 +10,11 @@ from app.notification_schema import ensure_notification_delivery_schema
 from app.polling_schema import ensure_polling_schema
 from app.repositories import matches as matches_repo
 from app.repositories import sports_requests
+from app.sports_api.client import SportsApiClient
 from app.workers.discovery import discover
 from app.workers.notifier import deliver_event_notification
 from app.workers.poller import tick
 from app.workers.run_report import RunReport
-from app.sports_api.client import SportsApiClient
 
 log = get_logger('cron_poll')
 
@@ -61,7 +61,7 @@ async def run_once() -> dict:
                     discovered = await discover(client, report=report)
                 except Exception as exc:
                     report.record('discovery', 'pass', exc)
-                    log.warning('discovery pass failed error_type=%s', type(exc).__name__)
+                    log.warning('discovery pass failed error_type=%s', type(exc).__name__, exc_info=True)
                 # Newly discovered live/near-kickoff fixtures need not wait for
                 # the next cron. Shared feeds and checked_at prevent duplicates.
                 if report.fixtures_upserted:

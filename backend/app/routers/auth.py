@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
@@ -42,7 +43,7 @@ async def logout(response: Response) -> dict:
 
 
 @router.get("/me")
-async def me(user_id: UUID = Depends(get_current_user_id)) -> dict:
+async def me(user_id: Annotated[UUID, Depends(get_current_user_id)]) -> dict:
     user = await users_repo.find_user_by_id(user_id)
     if user is None:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Not authenticated")

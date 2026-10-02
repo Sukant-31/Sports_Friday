@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -11,7 +11,7 @@ from app.workers import discovery, poller
 from app.workers.polling_policy import decide
 from app.workers.run_report import RunReport
 
-NOW = datetime(2026, 10, 2, 12, tzinfo=timezone.utc)
+NOW = datetime(2026, 10, 2, 12, tzinfo=UTC)
 
 
 def match(status='scheduled', offset=0, **extra):
@@ -62,7 +62,7 @@ async def setup_tick(monkeypatch, rows):
 
 
 async def test_future_or_finished_match_and_empty_tick_make_no_api_calls(monkeypatch):
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     client = SimpleNamespace(get_live_fixtures=AsyncMock(), get_date_fixtures=AsyncMock())
     for rows in ([], [match(starts_at=now+timedelta(days=1))],
                  [match(status='finished', starts_at=now)]):
@@ -75,7 +75,7 @@ async def test_future_or_finished_match_and_empty_tick_make_no_api_calls(monkeyp
 
 
 async def test_many_relevant_matches_share_live_feed_and_ignore_other_matches(monkeypatch):
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     rows = [match(status='live', starts_at=now-timedelta(minutes=30),
                   id=str(i), external_id=str(i)) for i in range(8)]
     process = await setup_tick(monkeypatch, rows)
@@ -91,7 +91,7 @@ async def test_many_relevant_matches_share_live_feed_and_ignore_other_matches(mo
 
 
 async def test_near_kickoff_without_live_match_only_uses_shared_date_feed(monkeypatch):
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     rows = [match(starts_at=now+timedelta(minutes=10), id=str(i), external_id=str(i)) for i in range(8)]
     await setup_tick(monkeypatch, rows)
     client = SimpleNamespace(get_live_fixtures=AsyncMock(),
@@ -103,7 +103,7 @@ async def test_near_kickoff_without_live_match_only_uses_shared_date_feed(monkey
 
 
 async def test_final_whistle_uses_date_feed_after_fixture_leaves_live_feed(monkeypatch):
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     process = await setup_tick(monkeypatch, [match(status='live', starts_at=now-timedelta(minutes=120))])
     client = SimpleNamespace(get_live_fixtures=AsyncMock(return_value={'response': []}),
         get_date_fixtures=AsyncMock(return_value=build_timeline('fixture')[-1][1]))
@@ -112,7 +112,7 @@ async def test_final_whistle_uses_date_feed_after_fixture_leaves_live_feed(monke
 
 
 async def test_budget_skip_still_retries_pending_notifications(monkeypatch):
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     await setup_tick(monkeypatch, [match(status='live', starts_at=now)])
     event = {'id': 'event', 'match_id': 'stored', 'team_id': 'home', 'type': 'goal', 'detail': {}}
     monkeypatch.setattr(poller.events_repo, 'pending_events', AsyncMock(return_value=[event]))
@@ -127,7 +127,7 @@ async def test_budget_skip_still_retries_pending_notifications(monkeypatch):
 
 
 async def test_processing_failure_does_not_block_other_matches(monkeypatch):
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     rows = [match(status='live', starts_at=now, id=str(i), external_id=str(i)) for i in range(2)]
     process = await setup_tick(monkeypatch, rows)
     process.side_effect = [RuntimeError('failed'), None]
@@ -139,7 +139,7 @@ async def test_processing_failure_does_not_block_other_matches(monkeypatch):
 
 
 async def test_discovery_refresh_is_persisted_and_shared_fixture_upserted_once(monkeypatch):
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     monkeypatch.setattr(discovery, 'repair_team_names', AsyncMock())
     teams = [{'external_id': str(i), 'last_discovered_at': None} for i in (100, 200)]
     monkeypatch.setattr(discovery.teams_repo, 'find_subscribed_teams', AsyncMock(return_value=teams))
@@ -189,6 +189,7 @@ def test_safe_reports_distinguish_budget_api_db_and_notification_failures():
 
 async def test_overlapping_cron_is_a_reported_successful_skip(monkeypatch, cron_runtime):
     from contextlib import asynccontextmanager
+
     from app.workers import cron_poll
     @asynccontextmanager
     async def locked(*args):

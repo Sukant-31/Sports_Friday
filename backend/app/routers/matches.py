@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
+from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 
-from app.deps import get_current_user_id
 from app.config import settings
+from app.deps import get_current_user_id
 from app.repositories import matches as matches_repo
 from app.repositories import muted_matches as muted_repo
 
@@ -17,7 +18,7 @@ router = APIRouter(prefix="/api/matches", tags=["matches"])
 def _data_warning(matches) -> str | None:
     if not settings.sports_api_key:
         return "Live sports data is not configured. Scores cannot update until the service is configured."
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     for match in matches:
         if match["status"] != "live":
             continue
@@ -41,7 +42,7 @@ def _shape_event(ev) -> dict:
 
 
 @router.get("/live")
-async def live(user_id: UUID = Depends(get_current_user_id)) -> dict:
+async def live(user_id: Annotated[UUID, Depends(get_current_user_id)]) -> dict:
     rows = await matches_repo.find_live_matches_for_user(user_id)
     matches = [dict(r) for r in rows]
 
@@ -59,7 +60,7 @@ async def live(user_id: UUID = Depends(get_current_user_id)) -> dict:
 
 
 @router.get("/{match_id}")
-async def detail(match_id: UUID, user_id: UUID = Depends(get_current_user_id)) -> dict:
+async def detail(match_id: UUID, user_id: Annotated[UUID, Depends(get_current_user_id)]) -> dict:
     match = await matches_repo.find_match_for_user(user_id, match_id)
     if match is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Match not found")
@@ -76,13 +77,13 @@ async def _require_visible_match(user_id, match_id) -> None:
 
 
 @router.post("/{match_id}/mute")
-async def mute(match_id: UUID, user_id: UUID = Depends(get_current_user_id)) -> dict:
+async def mute(match_id: UUID, user_id: Annotated[UUID, Depends(get_current_user_id)]) -> dict:
     await _require_visible_match(user_id, match_id)
     await muted_repo.mute(user_id, match_id)
     return {"muted": True}
 
 
 @router.delete("/{match_id}/mute", status_code=status.HTTP_204_NO_CONTENT)
-async def unmute(match_id: UUID, user_id: UUID = Depends(get_current_user_id)) -> Response:
+async def unmute(match_id: UUID, user_id: Annotated[UUID, Depends(get_current_user_id)]) -> Response:
     await muted_repo.unmute(user_id, match_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)

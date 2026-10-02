@@ -9,8 +9,9 @@ from __future__ import annotations
 
 import asyncio
 import time
-from datetime import datetime, timezone
-from typing import Any, Awaitable, Callable
+from collections.abc import Awaitable, Callable
+from datetime import UTC, datetime
+from typing import Any
 
 from app import db
 from app.config import settings
@@ -25,8 +26,8 @@ from app.sports_api.client import ApiRequestSkipped, SportsApiClient
 from app.workers.dedup_key import dedup_key
 from app.workers.diff import diff_match
 from app.workers.discovery import discover
-from app.workers.run_report import RunReport
 from app.workers.polling_policy import decide
+from app.workers.run_report import RunReport
 
 log = get_logger("poller")
 
@@ -109,7 +110,7 @@ async def process_fixture(notify: Notify, match, fixture, *, report=None) -> Non
 
 async def tick(client: SportsApiClient, notify: Notify, *, report: RunReport | None = None) -> None:
     matches = await matches_repo.find_pollable_matches()
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     due = [(match, decision) for match in matches if (decision := decide(match, now))]
     due.sort(key=lambda item: {'high': 0, 'medium': 1, 'low': 2}[item[1].priority])
     if report is not None:
@@ -127,7 +128,7 @@ async def tick(client: SportsApiClient, notify: Notify, *, report: RunReport | N
             live_error = 'skipped'
         except Exception as exc:
             live_error = exc
-            log.warning('live feed failed error_type=%s', type(exc).__name__)
+            log.warning('live feed failed error_type=%s', type(exc).__name__, exc_info=True)
             if report is not None:
                 report.record('polling', 'live_feed', exc)
     dates = {}
@@ -174,7 +175,7 @@ async def tick(client: SportsApiClient, notify: Notify, *, report: RunReport | N
                 "type": event["type"], "detail": event["detail"],
             })
         except Exception as exc:
-            log.warning("pending notification failed for %s: %s", event["id"], exc)
+            log.warning("pending notification failed for %s: %s", event["id"], exc, exc_info=True)
 
 
 async def run() -> None:

@@ -29,9 +29,8 @@ def decide(match, now: datetime) -> PollDecision | None:
             decision = PollDecision('high', 'live', settings.live_poll_interval_seconds)
         else:
             decision = PollDecision('high', 'unresolved_final_status', settings.unresolved_poll_interval_seconds)
-    elif start > now + timedelta(minutes=settings.pre_match_window_minutes):
-        return None
-    elif start < now - timedelta(hours=settings.status_recovery_hours):
+    elif (start > now + timedelta(minutes=settings.pre_match_window_minutes)
+          or start < now - timedelta(hours=settings.status_recovery_hours)):
         return None
     elif now < start:
         decision = PollDecision('high', 'near_kickoff', settings.pre_match_poll_interval_seconds)
