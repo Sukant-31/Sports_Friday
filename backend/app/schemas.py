@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+from typing import Annotated
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from pydantic import AfterValidator, BaseModel, ConfigDict, EmailStr, Field
 from pydantic.alias_generators import to_camel
+
+from app.push_destination import validate_push_destination
 
 
 # --- auth ---
@@ -61,10 +64,17 @@ class PushKeys(BaseModel):
     auth: str
 
 
+PushDestination = Annotated[str, AfterValidator(validate_push_destination)]
+
+
 class PushSubscribe(BaseModel):
-    endpoint: str
+    endpoint: PushDestination
     keys: PushKeys
 
 
 class PushUnsubscribe(BaseModel):
     endpoint: str
+
+
+class PushTest(BaseModel):
+    endpoint: PushDestination

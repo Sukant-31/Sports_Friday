@@ -19,7 +19,7 @@ async def setup(monkeypatch):
     monkeypatch.setattr(push.limiter, 'enabled', False)
     monkeypatch.setattr(settings, 'push_transport', 'webpush')
     monkeypatch.setattr(settings, 'vapid_private_key', 'test-key')
-    target = {'push_id': uuid4(), 'endpoint': 'https://push.example/current',
+    target = {'push_id': uuid4(), 'endpoint': 'https://updates.push.services.mozilla.com/wpush/v2/current',
               'p256dh': 'key', 'auth': 'auth'}
     lookup = AsyncMock(return_value=target)
     send = AsyncMock()
@@ -53,9 +53,9 @@ async def test_requires_authentication(setup):
 async def test_cannot_send_to_other_or_unregistered_subscription(setup):
     client, _app, user, _target, lookup, send = setup
     lookup.return_value = None
-    result = await client.post('/api/push/test', json={'endpoint': 'https://push.example/other'})
+    result = await client.post('/api/push/test', json={'endpoint': 'https://updates.push.services.mozilla.com/wpush/v2/other'})
     assert result.status_code == 404
-    lookup.assert_awaited_once_with(user, 'https://push.example/other')
+    lookup.assert_awaited_once_with(user, 'https://updates.push.services.mozilla.com/wpush/v2/other')
     send.assert_not_awaited()
 
 

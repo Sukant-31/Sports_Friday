@@ -55,7 +55,7 @@ async def test_auth_search_follow_preferences_match_and_push_subscription(monkey
             assert saved['external_id'] == match_ext
             assert (await client.get('/api/matches/' + saved['id'])).status_code == 200
             push = await client.post('/api/push/subscribe', json={
-                'endpoint': 'https://push.example/' + run,
+                'endpoint': 'https://updates.push.services.mozilla.com/wpush/v2/' + run,
                 'keys': {'p256dh': 'test-p256dh', 'auth': 'test-auth'}})
             assert push.status_code == 201
             assert (await client.get('/api/cron/poll')).status_code == 401

@@ -9,12 +9,38 @@ from typing import Any
 from urllib.parse import urlsplit
 
 from pywebpush import WebPushException, webpush
+from requests import Session
 
 from app.config import settings
 from app.logging_conf import get_logger
+from app.push_destination import validate_push_destination
 from app.repositories import push_subscriptions as push_repo
 
 log = get_logger("web_push")
+
+
+class _PushSession(Session):
+    """Check the actual outgoing URL and never follow provider redirects."""
+
+    def request(self, method, url, **kwargs):
+        validate_push_destination(url)
+        kwargs["allow_redirects"] = False
+        response = super().request(method, url, **kwargs)
+        if 300 <= response.status_code < 400:
+            raise WebPushException("Push service redirect refused", response=response)
+        return response
+
+
+def _send(subscription: dict, payload: dict) -> None:
+    with _PushSession() as session:
+        webpush(
+            subscription_info=subscription,
+            data=json.dumps(payload),
+            timeout=10,
+            vapid_private_key=settings.vapid_private_key,
+            vapid_claims=_vapid_claims(subscription["endpoint"]),
+            requests_session=session,
+        )
 
 
 def _vapid_claims(endpoint: str) -> dict[str, str]:
@@ -36,6 +62,7 @@ async def send_push(target: dict[str, Any], payload: dict[str, Any]) -> None:
         )
         return
 
+    validate_push_destination(target["endpoint"])
     if not settings.vapid_private_key:
         raise RuntimeError("VAPID keys are not set — run scripts/gen_vapid.py")
 
@@ -45,14 +72,7 @@ async def send_push(target: dict[str, Any], payload: dict[str, Any]) -> None:
     }
     try:
         # Keep synchronous network I/O off the worker event loop.
-        await asyncio.to_thread(
-            webpush,
-            subscription_info=subscription,
-            data=json.dumps(payload),
-            timeout=10,
-            vapid_private_key=settings.vapid_private_key,
-            vapid_claims=_vapid_claims(target["endpoint"]),
-        )
+        await asyncio.to_thread(_send, subscription, payload)
     except WebPushException as exc:
         status_code = getattr(exc.response, "status_code", None)
         if status_code in (404, 410):

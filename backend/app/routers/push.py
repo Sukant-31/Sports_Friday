@@ -10,7 +10,7 @@ from app.deps import get_current_user_id
 from app.logging_conf import get_logger
 from app.rate_limit import limiter
 from app.repositories import push_subscriptions as push_repo
-from app.schemas import PushSubscribe, PushUnsubscribe
+from app.schemas import PushSubscribe, PushTest, PushUnsubscribe
 from app.workers.web_push import send_push
 
 router = APIRouter(prefix="/api/push", tags=["push"])
@@ -19,7 +19,7 @@ log = get_logger('push')
 
 @router.post('/test')
 @limiter.limit('5/minute')
-async def test_notification(request: Request, body: PushUnsubscribe,
+async def test_notification(request: Request, body: PushTest,
                             user_id: Annotated[UUID, Depends(get_current_user_id)]) -> dict:
     target = await push_repo.find_subscription_for_user(user_id, body.endpoint)
     if target is None:
