@@ -51,9 +51,13 @@ async def vapid_public_key() -> dict:
 async def subscribe(
     body: PushSubscribe, user_id: Annotated[UUID, Depends(get_current_user_id)]
 ) -> dict:
-    await push_repo.upsert_push_subscription(
-        user_id, body.endpoint, body.keys.p256dh, body.keys.auth
-    )
+    try:
+        await push_repo.upsert_push_subscription(
+            user_id, body.endpoint, body.keys.p256dh, body.keys.auth
+        )
+    except push_repo.PushOwnershipConflict as exc:
+        raise HTTPException(409, 'This browser subscription is still linked to another account. '
+                            'Sign out of that account and disable its browser notifications first.') from exc
     return {"ok": True}
 
 

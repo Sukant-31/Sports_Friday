@@ -6,10 +6,21 @@ import Dashboard from './pages/Dashboard.jsx';
 import MatchDetail from './pages/MatchDetail.jsx';
 import Search from './pages/Search.jsx';
 import Settings from './pages/Settings.jsx';
+import { useState } from 'react';
 
 function Nav() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const [logoutError, setLogoutError] = useState(null);
+  async function onLogout() {
+    setLogoutError(null);
+    try {
+      await logout();
+      navigate('/login');
+    } catch (error) {
+      setLogoutError(error.message);
+    }
+  }
   return (
     <nav className="nav">
       <Link to="/" className="brand"><span className="brand-mark" aria-hidden="true">◉</span> sports<span className="brand-plus">+</span></Link>
@@ -18,11 +29,12 @@ function Nav() {
         <NavLink to="/search">Find teams</NavLink>
         <NavLink to="/settings">Settings</NavLink>
         {user ? (
-          <button onClick={() => logout().then(() => navigate('/login'))}>Log out</button>
+          <button onClick={onLogout}>Log out</button>
         ) : (
           <Link to="/login">Log in</Link>
         )}
       </div>
+      {logoutError && <p className="error" role="alert">{logoutError}</p>}
     </nav>
   );
 }

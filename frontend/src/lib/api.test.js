@@ -30,3 +30,14 @@ test('API handles empty success responses', async (t) => {
   t.mock.method(globalThis, 'fetch', async () => new Response(null, { status: 204 }));
   assert.equal(await api.unsubscribe('follow'), null);
 });
+
+test('push deregistration sends only the current endpoint with authentication', async (t) => {
+  t.mock.method(globalThis, 'fetch', async (url, options) => {
+    assert.equal(url, '/api/push/subscribe');
+    assert.equal(options.method, 'DELETE');
+    assert.equal(options.credentials, 'include');
+    assert.deepEqual(JSON.parse(options.body), { endpoint: 'current-browser' });
+    return new Response(null, { status: 204 });
+  });
+  assert.equal(await api.unregisterPush('current-browser'), null);
+});

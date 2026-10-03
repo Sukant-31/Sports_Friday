@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useCallback, useEffect } from 'react';
 import { api } from './api.js';
+import { authenticateWithPushCleanup, logoutWithPushCleanup } from '../pushLifecycle.js';
 
 const AuthContext = createContext(null);
 
@@ -19,19 +20,19 @@ export function AuthProvider({ children }) {
   }, []);
 
   const login = useCallback(async (email, password) => {
-    const { user } = await api.login(email, password);
+    const { user } = await authenticateWithPushCleanup(api.login, email, password);
     setUser(user);
     return user;
   }, []);
 
   const signup = useCallback(async (email, password) => {
-    const { user } = await api.signup(email, password);
+    const { user } = await authenticateWithPushCleanup(api.signup, email, password);
     setUser(user);
     return user;
   }, []);
 
   const logout = useCallback(async () => {
-    await api.logout();
+    await logoutWithPushCleanup();
     setUser(null);
   }, []);
 

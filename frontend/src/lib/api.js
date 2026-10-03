@@ -41,4 +41,6 @@ export const api = {
   vapidKey: () => request('/push/vapid-public-key'),
   registerPush: (subscription) =>
     request('/push/subscribe', { method: 'POST', body: subscription }),
+  unregisterPush: (endpoint) =>
+    request('/push/subscribe', { method: 'DELETE', body: { endpoint } }),
 };
