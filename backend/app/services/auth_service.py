@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncpg
 from fastapi import HTTPException, status
 from pydantic import ValidationError
 
@@ -12,7 +13,13 @@ async def signup(email: str, password: str) -> dict:
     email = normalize_email(email)
     if await users_repo.find_user_by_email(email):
         raise HTTPException(status.HTTP_409_CONFLICT, "Email already registered")
-    user = await users_repo.create_user(email, hash_password(password))
+    password_hash = hash_password(password)
+    try:
+        user = await users_repo.create_user(email, password_hash)
+    except asyncpg.UniqueViolationError as exc:
+        if exc.constraint_name != "users_email_key":
+            raise
+        raise HTTPException(status.HTTP_409_CONFLICT, "Email already registered") from exc
     return {"id": user["id"], "email": user["email"]}
 
 
