@@ -12,9 +12,18 @@ from app.push_destination import validate_push_destination
 
 
 # --- auth ---
+def _validate_password_bytes(password: str) -> str:
+    if len(password.encode("utf-8")) > 72:
+        raise ValueError("Password must be at most 72 UTF-8 bytes")
+    return password
+
+
+Password = Annotated[str, Field(min_length=8), AfterValidator(_validate_password_bytes)]
+
+
 class Credentials(BaseModel):
     email: EmailStr
-    password: str = Field(min_length=8, max_length=200)
+    password: Password
 
 
 class LoginCredentials(BaseModel):
@@ -22,7 +31,7 @@ class LoginCredentials(BaseModel):
     # shouldn't reject accounts whose stored email fails today's format rules
     # (e.g. the seeded demo@local).
     email: str
-    password: str = Field(min_length=8, max_length=200)
+    password: Password
 
 
 class UserOut(BaseModel):
