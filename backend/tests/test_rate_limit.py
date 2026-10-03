@@ -152,6 +152,7 @@ def test_deployment_environment_isolation(monkeypatch):
 )
 async def test_rejected_handlers_and_retry_after(monkeypatch, path, limit):
     from unittest.mock import AsyncMock, Mock
+
     from app.deps import get_current_user_id
     from app.routers import push
     from app.services import auth_service, team_service
@@ -196,10 +197,10 @@ async def test_rejected_handlers_and_retry_after(monkeypatch, path, limit):
 
 async def test_outage_and_accessible_routes(monkeypatch):
     from unittest.mock import AsyncMock
+
     from app import main
     from app.deps import get_current_user_id
-    from app.repositories import push_subscriptions
-    from app.repositories import matches, muted_matches
+    from app.repositories import matches, muted_matches, push_subscriptions
     from app.services import subscription_service
 
     app = create_app()
@@ -251,6 +252,7 @@ async def test_outage_and_accessible_routes(monkeypatch):
 @pytest.mark.parametrize("path", ["/api/auth/signup", "/api/teams/search", "/api/push/test"])
 async def test_all_protected_operations_fail_closed(monkeypatch, path):
     from unittest.mock import AsyncMock
+
     from app.deps import get_current_user_id
     from app.routers import push
     from app.services import auth_service, team_service
@@ -286,6 +288,7 @@ async def test_all_protected_operations_fail_closed(monkeypatch, path):
 
 async def test_rejected_follow_never_calls_provider(monkeypatch):
     from unittest.mock import AsyncMock
+
     from app.services import subscription_service
 
     create = AsyncMock(side_effect=AssertionError("unauthenticated follow must not run"))
