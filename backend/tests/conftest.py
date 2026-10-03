@@ -1,9 +1,17 @@
 from contextlib import asynccontextmanager
 from unittest.mock import AsyncMock
+from uuid import uuid4
 
 import pytest
 
 from app.workers import cron_poll
+
+
+@pytest.fixture(autouse=True)
+def isolated_http_rate_limit_namespace(monkeypatch):
+    """Retain real Redis enforcement without counters leaking between tests/runs."""
+    from app.rate_limit import limiter
+    monkeypatch.setattr(limiter, '_key_prefix', f'test:http-limit:{uuid4()}')
 
 
 @pytest.fixture

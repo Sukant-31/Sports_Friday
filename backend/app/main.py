@@ -7,6 +7,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from limits.errors import StorageError
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 
@@ -15,7 +16,7 @@ from app.config import settings
 from app.logging_conf import get_logger
 from app.polling_schema import ensure_polling_schema
 from app.queue import get_queue
-from app.rate_limit import limiter
+from app.rate_limit import limiter, rate_limit_exceeded, storage_unavailable
 from app.redis_client import close_redis
 from app.routers import auth, matches, push, subscriptions, teams
 from app.sports_api.client import SportsApiClient
@@ -41,7 +42,8 @@ def create_app() -> FastAPI:
     app = FastAPI(title="Sports Notification API", lifespan=lifespan)
 
     app.state.limiter = limiter
-    app.add_exception_handler(RateLimitExceeded, _rate_limit_handler)
+    app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded)
+    app.add_exception_handler(StorageError, storage_unavailable)
     app.add_middleware(SlowAPIMiddleware)
     app.add_middleware(
         CORSMiddleware,
@@ -73,12 +75,6 @@ def create_app() -> FastAPI:
     app.include_router(matches.router)
     app.include_router(push.router)
     return app
-
-
-def _rate_limit_handler(request, exc):
-    return JSONResponse(
-        status_code=429, content={"error": "Too many requests, try again later"}
-    )
 
 
 app = create_app()
