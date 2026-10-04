@@ -2,13 +2,16 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { api } from '../lib/api.js';
 import { createLatestRequest } from '../lib/latestRequest.js';
+import { exceptionalStatusLabel } from '../lib/fixtureStatus.js';
 import EventFeed from '../components/EventFeed.jsx';
 
 const POLL_MS = 15_000;
 
-function statusText(m) {
+export function statusText(m) {
   if (m.status === 'live') return `LIVE${m.minute != null ? ` · ${m.minute}'` : ''}`;
   if (m.status === 'finished') return 'Full time';
+  const exceptional = exceptionalStatusLabel(m.status);
+  if (exceptional) return exceptional;
   if (m.starts_at) {
     return `Kick-off ${new Date(m.starts_at).toLocaleString([], {
       weekday: 'short',

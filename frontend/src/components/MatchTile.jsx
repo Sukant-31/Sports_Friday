@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import EventFeed from './EventFeed.jsx';
+import { exceptionalStatusLabel } from '../lib/fixtureStatus.js';
 
 function StatusBadge({ match }) {
   if (match.status === 'live') {
@@ -11,6 +12,8 @@ function StatusBadge({ match }) {
     );
   }
   if (match.status === 'finished') return <span className="badge">FT</span>;
+  const exceptional = exceptionalStatusLabel(match.status);
+  if (exceptional) return <span className="badge">{exceptional}</span>;
   // scheduled
   const kickoff = match.starts_at
     ? new Date(match.starts_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
