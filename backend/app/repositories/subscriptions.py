@@ -26,15 +26,15 @@ async def create_subscription(
     notify_cards: bool = True,
     notify_match_status: bool = True,
 ) -> asyncpg.Record:
+    # The no-op conflict update atomically locks and returns the existing row,
+    # including concurrent inserts/PATCHes, without replacing its preferences.
     return await db.fetchrow(
         """
         INSERT INTO subscriptions
           (user_id, team_id, notify_goals, notify_cards, notify_match_status)
         VALUES ($1, $2, $3, $4, $5)
         ON CONFLICT (user_id, team_id) DO UPDATE
-          SET notify_goals = EXCLUDED.notify_goals,
-              notify_cards = EXCLUDED.notify_cards,
-              notify_match_status = EXCLUDED.notify_match_status
+          SET id = subscriptions.id
         RETURNING *
         """,
         user_id,
