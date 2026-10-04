@@ -41,3 +41,14 @@ test('push deregistration sends only the current endpoint with authentication', 
   });
   assert.equal(await api.unregisterPush('current-browser'), null);
 });
+
+test('match-detail reads forward cancellation without changing cookies', async (t) => {
+  const controller = new AbortController();
+  t.mock.method(globalThis, 'fetch', async (url, options) => {
+    assert.equal(url, '/api/matches/match');
+    assert.equal(options.signal, controller.signal);
+    assert.equal(options.credentials, 'include');
+    return new Response(JSON.stringify({ match: { id: 'match' }, events: [] }));
+  });
+  await api.matchDetail('match', { signal: controller.signal });
+});

@@ -1,9 +1,10 @@
 // Thin fetch wrapper. credentials:'include' sends the httpOnly auth cookie.
 // In dev, Vite proxies /api -> http://localhost:8000 (same-origin cookies).
 
-async function request(path, { method = 'GET', body } = {}) {
+async function request(path, { method = 'GET', body, signal } = {}) {
   const res = await fetch(`/api${path}`, {
     method,
+    signal,
     credentials: 'include',
     headers: body ? { 'Content-Type': 'application/json' } : undefined,
     body: body ? JSON.stringify(body) : undefined,
@@ -34,7 +35,7 @@ export const api = {
   unsubscribe: (id) => request(`/subscriptions/${id}`, { method: 'DELETE' }),
 
   liveMatches: () => request('/matches/live'),
-  matchDetail: (id) => request(`/matches/${id}`),
+  matchDetail: (id, { signal } = {}) => request(`/matches/${id}`, { signal }),
   muteMatch: (id) => request(`/matches/${id}/mute`, { method: 'POST' }),
   unmuteMatch: (id) => request(`/matches/${id}/mute`, { method: 'DELETE' }),
 
