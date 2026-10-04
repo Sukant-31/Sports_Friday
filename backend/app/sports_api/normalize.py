@@ -7,6 +7,16 @@ from typing import Any
 
 _LIVE_CODES = {"1H", "2H", "HT", "ET", "BT", "P", "LIVE"}
 _FINISHED_CODES = {"FT", "AET", "PEN"}
+_EXCEPTIONAL_CODES = {
+    "TBD": "time_to_be_defined",
+    "SUSP": "suspended",
+    "INT": "interrupted",
+    "PST": "postponed",
+    "CANC": "cancelled",
+    "ABD": "abandoned",
+    "AWD": "awarded",
+    "WO": "walkover",
+}
 
 
 def normalize_status(short_code: str | None) -> str:
@@ -14,7 +24,9 @@ def normalize_status(short_code: str | None) -> str:
         return "finished"
     if short_code in _LIVE_CODES:
         return "live"
-    return "scheduled"
+    if short_code == "NS":
+        return "scheduled"
+    return _EXCEPTIONAL_CODES.get(short_code, "unknown")
 
 
 def normalize_team(raw: dict[str, Any]) -> dict[str, Any]:

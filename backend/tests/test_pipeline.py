@@ -110,6 +110,7 @@ async def test_notifier_sends_for_subscribed_team(fixtures, monkeypatch):
 
     async def fake_send_push(target, payload):
         sent.append((target["endpoint"], payload))
+        return "accepted"
 
     monkeypatch.setattr(notifier_mod, "send_push", fake_send_push)
 
@@ -148,6 +149,7 @@ async def test_failed_delivery_retried_after_match_finishes(fixtures, monkeypatc
     sent = []
     async def succeed(target, payload):
         sent.append(payload)
+        return "accepted"
     monkeypatch.setattr(notifier_mod, "send_push", succeed)
     await tick(client, notifier_mod.deliver_event_notification)
     assert any(p["tag"] == goal["match_event_id"] for p in sent)
@@ -175,6 +177,7 @@ async def test_partial_failure_does_not_resend_successful_recipient(fixtures, mo
         if target["endpoint"] == second_endpoint and broken:
             raise RuntimeError("one device unavailable")
         successes.append(target["endpoint"])
+        return "accepted"
 
     monkeypatch.setattr(notifier_mod, "send_push", send)
     with pytest.raises(RuntimeError):
@@ -184,3 +187,130 @@ async def test_partial_failure_does_not_resend_successful_recipient(fixtures, mo
     await notifier_mod.deliver_event_notification(job)
     assert len(successes) == 2
     assert len(set(successes)) == 2
+
+
+async def lifecycle_jobs(match, event_type):
+    from app.repositories import match_events as events_repo
+
+    jobs = []
+    for side in ('home', 'away'):
+        team_id = match[f'{side}_team_id']
+        event = await events_repo.record_event_if_new(
+            match['id'], team_id, event_type, {},
+            f"{match['external_id']}:{event_type}:t{team_id}",
+        )
+        if event:
+            jobs.append({'match_event_id': str(event['id']), 'match_id': str(match['id']),
+                         'team_id': str(team_id), 'type': event_type, 'detail': {}})
+    return jobs
+
+
+async def capture_lifecycle(fixtures, monkeypatch):
+    match, user = fixtures['match'], fixtures['user']
+    await subs_repo.create_subscription(user['id'], match['away_team_id'], True, True, True)
+    sent = []
+
+    async def send(target, payload):
+        sent.append((target['push_id'], payload))
+        return 'accepted'
+
+    monkeypatch.setattr(notifier_mod, 'send_push', send)
+    return match, sent
+
+
+@pytest.mark.parametrize('event_type', ['kickoff', 'half_time', 'full_time', 'postponed', 'cancelled'])
+async def test_lifecycle_fanout_and_retries_notify_browser_once(fixtures, monkeypatch, event_type):
+    import asyncio
+
+    match, sent = await capture_lifecycle(fixtures, monkeypatch)
+    jobs = await lifecycle_jobs(match, event_type)
+    # Both team rows race with duplicate worker/cron attempts.
+    await asyncio.gather(*(notifier_mod.deliver_event_notification(job)
+                           for job in jobs * 2))
+    assert len(sent) == 1
+    for job in jobs:
+        await notifier_mod.deliver_event_notification(job)
+    assert len(sent) == 1
+    assert await lifecycle_jobs(match, event_type) == []
+
+
+@pytest.mark.parametrize('sequence', [('kickoff', 'half_time'), ('half_time', 'full_time')])
+async def test_distinct_lifecycle_types_each_notify(fixtures, monkeypatch, sequence):
+    match, sent = await capture_lifecycle(fixtures, monkeypatch)
+    for event_type in sequence:
+        for job in await lifecycle_jobs(match, event_type):
+            await notifier_mod.deliver_event_notification(job)
+    assert len(sent) == 2
+
+
+async def test_same_lifecycle_type_on_different_matches_notifies_each(fixtures, monkeypatch):
+    match, sent = await capture_lifecycle(fixtures, monkeypatch)
+    second = await db.fetchrow(
+        'INSERT INTO matches (external_id,home_team_id,away_team_id,status) '
+        "VALUES ($1,$2,$3,'scheduled') RETURNING *",
+        f'lifecycle-{uuid.uuid4()}', match['home_team_id'], match['away_team_id'],
+    )
+    try:
+        for current in (match, second):
+            for job in await lifecycle_jobs(current, 'kickoff'):
+                await notifier_mod.deliver_event_notification(job)
+        assert len(sent) == 2
+    finally:
+        await db.execute('DELETE FROM matches WHERE id=$1', second['id'])
+
+
+async def test_muted_lifecycle_fanout_sends_nothing(fixtures, monkeypatch):
+    match, sent = await capture_lifecycle(fixtures, monkeypatch)
+    await db.execute('INSERT INTO muted_matches (user_id,match_id) VALUES ($1,$2)',
+                     fixtures['user']['id'], match['id'])
+    for job in await lifecycle_jobs(match, 'kickoff'):
+        await notifier_mod.deliver_event_notification(job)
+    assert sent == []
+
+
+async def test_lifecycle_keeps_per_team_preferences(fixtures, monkeypatch):
+    match, sent = await capture_lifecycle(fixtures, monkeypatch)
+    await db.execute('UPDATE subscriptions SET notify_match_status=false '
+                     'WHERE user_id=$1 AND team_id=$2',
+                     fixtures['user']['id'], match['home_team_id'])
+    # Home row has no eligible recipient; away row must still deliver.
+    jobs = await lifecycle_jobs(match, 'kickoff')
+    await notifier_mod.deliver_event_notification(jobs[0])
+    assert sent == []
+    await notifier_mod.deliver_event_notification(jobs[1])
+    assert len(sent) == 1
+
+
+async def test_repeated_real_polling_with_both_teams_delivers_kickoff_once(fixtures, monkeypatch):
+    match, sent = await capture_lifecycle(fixtures, monkeypatch)
+    client = MockSportsApiClient(build_timeline(match['external_id']))
+    await poll_match(client, notifier_mod.deliver_event_notification, match)
+    client.advance()
+    await poll_match(client, notifier_mod.deliver_event_notification, match)
+    await poll_match(client, notifier_mod.deliver_event_notification, match)
+    titles = [note['title'] for _, note in sent]
+    assert titles.count('🟢 Kick-off') == 1
+    assert titles.count('⚽ GOAL!') == 1
+
+
+async def test_lifecycle_partial_failure_and_other_team_retry_skip_success(fixtures, monkeypatch):
+    match, sent = await capture_lifecycle(fixtures, monkeypatch)
+    endpoint = f'https://push.example/lifecycle-{uuid.uuid4()}'
+    await push_repo.upsert_push_subscription(fixtures['user']['id'], endpoint, 'key', 'auth')
+    broken = True
+
+    async def send(target, payload):
+        if target['endpoint'] == endpoint and broken:
+            raise RuntimeError('Synthetic device failure')
+        sent.append(target['push_id'])
+        return 'accepted'
+
+    monkeypatch.setattr(notifier_mod, 'send_push', send)
+    jobs = await lifecycle_jobs(match, 'kickoff')
+    with pytest.raises(RuntimeError):
+        await notifier_mod.deliver_event_notification(jobs[0])
+    assert len(sent) == 1
+    broken = False
+    await notifier_mod.deliver_event_notification(jobs[1])
+    await notifier_mod.deliver_event_notification(jobs[0])
+    assert len(sent) == len(set(sent)) == 2

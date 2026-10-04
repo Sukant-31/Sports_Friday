@@ -16,8 +16,14 @@ def diff_match(prev: dict[str, Any] | None, nxt: dict[str, Any]) -> list[dict[st
     # current status, never phantom goals for the score it's already at.
     before = prev or {"status": "scheduled", "home_score": 0, "away_score": 0}
 
+    # Administrative/uncertain results must not manufacture goals or a
+    # normal match completion. Retain them as state, without notifications.
+    if nxt["status"] not in ("scheduled", "live", "finished"):
+        return events
+
     # --- status transitions ---
-    if before.get("status") != "live" and nxt["status"] == "live":
+    if (before.get("status") in ("scheduled", "postponed", "time_to_be_defined")
+            and nxt["status"] == "live"):
         events.append(_lifecycle("kickoff", nxt))
     if before.get("status") != "finished" and nxt["status"] == "finished":
         events.append(_lifecycle("full_time", nxt))

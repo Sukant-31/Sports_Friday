@@ -108,3 +108,69 @@ async def test_signup_hashes_the_exact_password(monkeypatch):
     assert bcrypt.checkpw(password.encode("utf-8"), stored_hash)
     assert not bcrypt.checkpw(password.strip().encode("utf-8"), stored_hash)
     assert not bcrypt.checkpw(password.replace("e\u0301", "é").encode("utf-8"), stored_hash)
+
+
+@pytest.mark.parametrize("path", ["/api/auth/signup", "/api/auth/login"])
+@pytest.mark.parametrize("body", [
+    {"email": "password-test@example.com", "password": "SecretRejectedPassword" * 10},
+    {"password": "SecretRejectedPassword"},
+    {"email": "password-test@example.com", "password": {"secret": "SecretRejectedPassword"}},
+])
+async def test_validation_errors_never_echo_password_input(path, body, caplog):
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=create_app()), base_url="http://test"
+    ) as client:
+        response = await client.post(path, json=body)
+    assert response.status_code == 422
+    assert "SecretRejectedPassword" not in response.text
+    assert "SecretRejectedPassword" not in caplog.text
+    assert all("input" not in error and "ctx" not in error
+               for error in response.json()["detail"])
+
+
+@pytest.mark.parametrize("password", ["normal-password", "a" * 72, "é" * 36, "😀" * 18])
+async def test_signup_then_login_uses_only_bcrypt_hash(monkeypatch, password):
+    stored = {}
+    uid = uuid4()
+
+    async def lookup(email):
+        return stored.get(email)
+
+    async def create(email, password_hash):
+        assert password_hash != password
+        assert password_hash.startswith("$2b$12$")
+        user = {"id": uid, "email": email, "password_hash": password_hash}
+        stored[email] = user
+        return user
+
+    monkeypatch.setattr(auth_service.users_repo, "find_user_by_email", lookup)
+    monkeypatch.setattr(auth_service.users_repo, "create_user", create)
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=create_app()), base_url="http://test"
+    ) as client:
+        body = {"email": "roundtrip@example.com", "password": password}
+        signup = await client.post("/api/auth/signup", json=body)
+        login = await client.post("/api/auth/login", json=body)
+        wrong = await client.post("/api/auth/login", json={**body, "password": "wrong-password"})
+    assert signup.status_code == 201
+    assert login.status_code == 200
+    assert signup.json()["user"] == login.json()["user"]
+    assert wrong.status_code == 401
+    for response in (signup, login, wrong):
+        assert password not in response.text
+        assert "password_hash" not in response.text
+
+
+async def test_non_auth_validation_response_is_unchanged():
+    app = create_app()
+
+    @app.get("/validation-regression/{number}")
+    async def read_number(number: int):
+        return {"number": number}
+
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        response = await client.get("/validation-regression/not-an-integer")
+    assert response.status_code == 422
+    assert response.json()["detail"][0]["input"] == "not-an-integer"

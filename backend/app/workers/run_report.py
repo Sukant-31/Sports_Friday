@@ -22,6 +22,7 @@ class RunReport:
     fixtures_requiring_polling: int = 0
     fixture_priorities: dict = field(default_factory=dict)
     notifications_generated: int = 0
+    # Legacy internal name: counts provider acceptance receipts, never display.
     notifications_delivered: int = 0
     api_requests: dict = field(default_factory=dict)
     api_budget: dict = field(default_factory=dict)
@@ -62,5 +63,6 @@ class RunReport:
                 'fixture_priorities': self.fixture_priorities,
                 'api_requests': self.api_requests, 'api_budget': self.api_budget,
                 'notifications': {'generated': self.notifications_generated,
-                                  'delivered': self.notifications_delivered,
+                                  'accepted': self.notifications_delivered,
+                                  'display_confirmation': 'unavailable',
                                   'failed_operations': self.operations['notifications']['failed']}}

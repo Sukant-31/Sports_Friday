@@ -1,11 +1,12 @@
 """Web Push sending via pywebpush. On an expired subscription (404/410) the
-row is pruned and the call resolves; other failures raise so arq retries."""
+row is pruned. Provider acceptance is not confirmation of browser display.
+Permanent rejections are distinguished from retryable failures."""
 
 from __future__ import annotations
 
 import asyncio
 import json
-from typing import Any
+from typing import Any, Literal
 from urllib.parse import urlsplit
 
 from pywebpush import WebPushException, webpush
@@ -50,7 +51,20 @@ def _vapid_claims(endpoint: str) -> dict[str, str]:
     return {"sub": settings.vapid_subject, "aud": f"{parts.scheme}://{parts.netloc}"}
 
 
-async def send_push(target: dict[str, Any], payload: dict[str, Any]) -> None:
+class InvalidPushSubscription(ValueError):
+    """Subscription input that cannot be retried unchanged."""
+
+
+class PermanentPushError(WebPushException):
+    """A rejected request that must not be automatically retried unchanged."""
+
+    def __init__(self, status_code: int):
+        message = "Push service redirect refused" if 300 <= status_code < 400 else "Push service permanently rejected request"
+        super().__init__(message)
+        self.status_code = status_code
+
+
+async def send_push(target: dict[str, Any], payload: dict[str, Any]) -> Literal["accepted", "expired", "simulated"]:
     # Console transport: log instead of sending. Lets the full poller/notifier
     # flow run locally without a real browser push subscription.
     if settings.push_transport == "console":
@@ -60,9 +74,12 @@ async def send_push(target: dict[str, Any], payload: dict[str, Any]) -> None:
             payload.get("title"),
             payload.get("body"),
         )
-        return
+        return "simulated"
 
-    validate_push_destination(target["endpoint"])
+    try:
+        validate_push_destination(target["endpoint"])
+    except ValueError as exc:
+        raise InvalidPushSubscription("Invalid push destination") from exc
     if not settings.vapid_private_key:
         raise RuntimeError("VAPID keys are not set — run scripts/gen_vapid.py")
 
@@ -75,8 +92,17 @@ async def send_push(target: dict[str, Any], payload: dict[str, Any]) -> None:
         await asyncio.to_thread(_send, subscription, payload)
     except WebPushException as exc:
         status_code = getattr(exc.response, "status_code", None)
+        if status_code is None and exc.message in {
+            "Invalid p256dh key specified", "No keys specified in subscription info",
+            "Missing keys value: p256dh", "Missing keys value: auth",
+        }:
+            raise InvalidPushSubscription("Invalid push subscription keys") from exc
         if status_code in (404, 410):
             log.info("pruning expired push subscription %s", target.get("push_id"))
             await push_repo.delete_push_subscription_by_id(target["push_id"])
-            return
+            return "expired"
+        if status_code is not None and (300 <= status_code < 400 or
+                                       400 <= status_code < 500 and status_code not in (408, 425, 429)):
+            raise PermanentPushError(status_code) from exc
         raise
+    return "accepted"

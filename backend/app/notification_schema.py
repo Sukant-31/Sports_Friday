@@ -1,10 +1,12 @@
-"""Upgrade the notification ledger on databases predating migration 006.
+"""Upgrade the notification ledgers for migrations 006 and 009.
 
 Serverless deployments do not run the local migration script. This narrow,
 idempotent upgrade preserves 006's historical-event handling and makes cron
 safe when that migration was omitted. Other schema migrations stay explicit.
 """
 from __future__ import annotations
+
+from importlib.resources import files
 
 from app import db
 from app.logging_conf import get_logger
@@ -18,6 +20,23 @@ async def ensure_notification_delivery_schema() -> None:
 
 
 async def _ensure_schema(conn) -> None:
+    await _ensure_receipts_schema(conn)
+    if await conn.fetchval("SELECT to_regclass('notification_terminal_outcomes') IS NOT NULL"):
+        return
+    async with conn.transaction():
+        await conn.execute("SELECT pg_advisory_xact_lock(hashtext($1))",
+                           'sports_friday.notification_delivery_schema')
+        if await conn.fetchval("SELECT to_regclass('notification_terminal_outcomes') IS NOT NULL"):
+            return
+        await conn.execute(files('app').joinpath('sql/009_push_delivery_outcomes.sql').read_text())
+        await conn.execute("CREATE TABLE IF NOT EXISTS schema_migrations "
+                           "(name TEXT PRIMARY KEY, applied_at TIMESTAMPTZ DEFAULT now())")
+        await conn.execute("INSERT INTO schema_migrations (name) VALUES ($1) ON CONFLICT DO NOTHING",
+                           '009_push_delivery_outcomes.sql')
+    log.info('Applied missing push delivery outcomes schema (migration 009)')
+
+
+async def _ensure_receipts_schema(conn) -> None:
     async def ready() -> bool:
         return await conn.fetchval("""
             SELECT EXISTS (
