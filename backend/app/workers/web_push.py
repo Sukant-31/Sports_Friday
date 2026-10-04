@@ -61,7 +61,13 @@ class PermanentPushError(WebPushException):
     def __init__(self, status_code: int):
         message = "Push service redirect refused" if 300 <= status_code < 400 else "Push service permanently rejected request"
         super().__init__(message)
-        self.status_code = status_code
+        self._status_code = status_code
+
+    @property
+    def status_code(self) -> int:
+        # Newer pywebpush versions expose a read-only property with this name.
+        # Keep our sanitized error's status independent of the provider response.
+        return self._status_code
 
 
 async def send_push(target: dict[str, Any], payload: dict[str, Any]) -> Literal["accepted", "expired", "simulated"]:

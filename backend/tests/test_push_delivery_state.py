@@ -19,6 +19,22 @@ fixtures = test_pipeline.fixtures
 transport = test_push_destination.transport
 
 
+@pytest.mark.parametrize('status', [301, 403])
+async def test_permanent_failure_with_inherited_read_only_status(transport, monkeypatch, status):
+    # Reproduce newer pywebpush's property even with an older local dependency.
+    monkeypatch.setattr(WebPushException, 'status_code',
+                        property(lambda self: getattr(self.response, 'status_code', None)),
+                        raising=False)
+    target, response, network, delete = transport
+    response.status_code = status
+    with pytest.raises(web_push.PermanentPushError) as error:
+        await web_push.send_push(target, {'title': 'Test'})
+    assert error.value.status_code == status
+    assert error.value.response is None
+    network.assert_called_once()
+    delete.assert_not_awaited()
+
+
 @pytest.mark.parametrize('status', [200, 201, 202])
 async def test_provider_acceptance_is_explicit(transport, status):
     target, response, network, delete = transport
