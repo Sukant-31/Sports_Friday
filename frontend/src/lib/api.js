@@ -34,7 +34,7 @@ export const api = {
   updateSubscription: (id, prefs) => request(`/subscriptions/${id}`, { method: 'PATCH', body: prefs }),
   unsubscribe: (id) => request(`/subscriptions/${id}`, { method: 'DELETE' }),
 
-  liveMatches: () => request('/matches/live'),
+  liveMatches: ({ signal } = {}) => request('/matches/live', { signal }),
   matchDetail: (id, { signal } = {}) => request(`/matches/${id}`, { signal }),
   muteMatch: (id) => request(`/matches/${id}/mute`, { method: 'POST' }),
   unmuteMatch: (id) => request(`/matches/${id}/mute`, { method: 'DELETE' }),

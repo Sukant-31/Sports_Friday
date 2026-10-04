@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../lib/api.js';
+import { createLatestRequest } from '../lib/latestRequest.js';
 import { useAuth } from '../lib/auth.jsx';
 import { enablePushNotifications } from '../registerSW.js';
 import MatchTile from '../components/MatchTile.jsx';
@@ -26,19 +27,23 @@ export default function Dashboard() {
   const [refreshing, setRefreshing] = useState(false);
   const [, forceTick] = useState(0); // re-render the "updated Xs ago" label
   const timer = useRef(null);
+  const reads = useRef(createLatestRequest());
 
   const load = useCallback(async () => {
+    const request = reads.current.start();
     setRefreshing(true);
     try {
-      const d = await api.liveMatches();
+      const d = await api.liveMatches({ signal: request.signal });
+      if (!request.isCurrent()) return;
       setMatches(d.matches);
       setWarning(d.warning);
       setUpdatedAt(Date.now());
       setError(null);
     } catch (e) {
+      if (!request.isCurrent()) return;
       setError(e.message); // keep showing last-known data
     } finally {
-      setRefreshing(false);
+      if (request.isCurrent()) setRefreshing(false);
     }
   }, []);
 
@@ -63,6 +68,7 @@ export default function Dashboard() {
     document.addEventListener('visibilitychange', onVisibility);
     const relTimer = setInterval(() => forceTick((t) => t + 1), 1000);
     return () => {
+      reads.current.cancel();
       stop();
       document.removeEventListener('visibilitychange', onVisibility);
       clearInterval(relTimer);
