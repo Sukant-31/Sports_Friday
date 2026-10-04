@@ -19,6 +19,7 @@ from app.queue import get_queue
 from app.rate_limit import limiter, rate_limit_exceeded, storage_unavailable
 from app.redis_client import close_redis
 from app.routers import auth, matches, push, subscriptions, teams
+from app.security_headers import SecurityHeadersMiddleware
 from app.sports_api.client import SportsApiClient
 from app.workers.cron_poll import run_once
 
@@ -52,6 +53,7 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+    app.add_middleware(SecurityHeadersMiddleware)
 
     @app.get("/health")
     async def health() -> dict:
