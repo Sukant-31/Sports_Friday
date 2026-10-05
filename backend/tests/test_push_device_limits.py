@@ -8,8 +8,8 @@ from uuid import uuid4
 import httpx
 import pytest
 import pytest_asyncio
-from redis.exceptions import ConnectionError
 from pywebpush import WebPushException
+from redis.exceptions import ConnectionError
 from requests import Response
 
 from app import db
@@ -17,9 +17,9 @@ from app.config import settings
 from app.deps import get_current_user_id
 from app.main import create_app
 from app.rate_limit import limiter
-from app.security import create_token
 from app.repositories import push_subscriptions as repo
 from app.repositories import users
+from app.security import create_token
 from app.workers import web_push
 
 
