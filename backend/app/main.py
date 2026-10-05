@@ -18,6 +18,7 @@ from app.config import settings
 from app.cron_auth import require_cron_auth
 from app.logging_conf import get_logger
 from app.polling_schema import ensure_polling_schema
+from app.push_registration_limits import PushRegistrationBodyLimitMiddleware
 from app.queue import get_queue
 from app.rate_limit import limiter, rate_limit_exceeded, storage_unavailable
 from app.redis_client import close_redis
@@ -61,6 +62,7 @@ def create_app() -> FastAPI:
     app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded)
     app.add_exception_handler(StorageError, storage_unavailable)
     app.add_middleware(SlowAPIMiddleware)
+    app.add_middleware(PushRegistrationBodyLimitMiddleware)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origins,

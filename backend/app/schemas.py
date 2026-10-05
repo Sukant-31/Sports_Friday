@@ -9,6 +9,7 @@ from pydantic import AfterValidator, BaseModel, ConfigDict, EmailStr, Field
 from pydantic.alias_generators import to_camel
 
 from app.push_destination import validate_push_destination
+from app.push_registration_limits import endpoint_bytes, key_bytes
 
 
 # --- auth ---
@@ -69,15 +70,15 @@ class SubscriptionUpdate(_CamelModel):
 
 # --- push ---
 class PushKeys(BaseModel):
-    p256dh: str
-    auth: str
+    p256dh: Annotated[str, AfterValidator(key_bytes)]
+    auth: Annotated[str, AfterValidator(key_bytes)]
 
 
 PushDestination = Annotated[str, AfterValidator(validate_push_destination)]
 
 
 class PushSubscribe(BaseModel):
-    endpoint: PushDestination
+    endpoint: Annotated[str, AfterValidator(endpoint_bytes), AfterValidator(validate_push_destination)]
     keys: PushKeys
 
 
