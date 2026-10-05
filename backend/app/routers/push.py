@@ -55,6 +55,8 @@ async def subscribe(
         await push_repo.upsert_push_subscription(
             user_id, body.endpoint, body.keys.p256dh, body.keys.auth
         )
+    except push_repo.PushDeviceLimitReached as exc:
+        raise HTTPException(409, "Push subscription device limit reached") from exc
     except push_repo.PushOwnershipConflict as exc:
         raise HTTPException(409, 'This browser subscription is still linked to another account. '
                             'Sign out of that account and disable its browser notifications first.') from exc

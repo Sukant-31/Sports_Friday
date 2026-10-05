@@ -4,6 +4,12 @@ import asyncpg
 
 from app import db
 
+MAX_PUSH_ENDPOINTS = 10
+
+
+class PushDeviceLimitReached(ValueError):
+    """A new endpoint would exceed the account's stored-device allowance."""
+
 
 class PushOwnershipConflict(ValueError):
     """An endpoint is still associated with another account."""
@@ -20,13 +26,27 @@ async def upsert_push_subscription(
     user_id, endpoint: str, p256dh: str, auth: str
 ) -> asyncpg.Record:
     async with db.pool().acquire() as conn, conn.transaction():
-        # Coordinate concurrent registrations without changing the schema.
+        # Always lock user first, then endpoint. The user lock serializes
+        # different endpoints across connections/serverless instances; the
+        # endpoint lock still prevents cross-account ownership races.
+        await conn.execute("SELECT pg_advisory_xact_lock(hashtextextended($1, 1))",
+                           f"push-devices:{user_id}")
         await conn.execute("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))", endpoint)
         if await conn.fetchval(
             "SELECT EXISTS (SELECT 1 FROM push_subscriptions "
             "WHERE endpoint=$1 AND user_id IS DISTINCT FROM $2::uuid)", endpoint, user_id,
         ):
             raise PushOwnershipConflict("Push endpoint belongs to another account")
+        existing = await conn.fetchval(
+            "SELECT EXISTS (SELECT 1 FROM push_subscriptions WHERE user_id=$1 AND endpoint=$2)",
+            user_id, endpoint,
+        )
+        if not existing:
+            count = await conn.fetchval(
+                "SELECT count(*) FROM push_subscriptions WHERE user_id=$1", user_id,
+            )
+            if count >= MAX_PUSH_ENDPOINTS:
+                raise PushDeviceLimitReached("Push subscription device limit reached")
         return await conn.fetchrow(
             """
         INSERT INTO push_subscriptions (user_id, endpoint, p256dh, auth)
