@@ -115,7 +115,12 @@ async def polling_counts() -> dict:
 
 
 async def find_live_matches_for_user(user_id) -> list[asyncpg.Record]:
-    """Followed fixtures, including matches finished within the last 24 hours."""
+    """Followed live/upcoming/recent fixtures, without stale inactive history.
+
+    Non-finished fixtures remain visible for seven days after kickoff or an
+    actual state update. A lookup-only last_checked_at does not extend this
+    window. Live fixtures and the existing 24-hour finished rule are preserved.
+    """
     return await db.fetch(
         """
         SELECT DISTINCT m.id, m.external_id, m.status, m.home_score, m.away_score,
@@ -127,13 +132,17 @@ async def find_live_matches_for_user(user_id) -> list[asyncpg.Record]:
         JOIN subscriptions s ON s.team_id IN (m.home_team_id, m.away_team_id)
         WHERE s.user_id = $1
           AND (
-            m.status != 'finished'
+            m.status = 'live'
+            OR (
+              m.status != 'finished'
+              AND GREATEST(m.starts_at, m.last_polled_at) >= now() - INTERVAL '168 hours'
+            )
             OR (
               m.status = 'finished'
               AND COALESCE(m.last_polled_at, m.starts_at) >= now() - INTERVAL '24 hours'
             )
           )
-        ORDER BY m.starts_at
+        ORDER BY m.starts_at, m.id
         """,
         user_id,
     )
