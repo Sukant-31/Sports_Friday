@@ -8,6 +8,7 @@ from uuid import uuid4
 import httpx
 import pytest
 import pytest_asyncio
+from redis.exceptions import ConnectionError
 from pywebpush import WebPushException
 from requests import Response
 
@@ -16,6 +17,7 @@ from app.config import settings
 from app.deps import get_current_user_id
 from app.main import create_app
 from app.rate_limit import limiter
+from app.security import create_token
 from app.repositories import push_subscriptions as repo
 from app.repositories import users
 from app.workers import web_push
@@ -53,7 +55,8 @@ async def accounts():
             app = create_app()
             app.dependency_overrides[get_current_user_id] = lambda uid=uid: uid
             clients.append(httpx.AsyncClient(transport=httpx.ASGITransport(app=app),
-                                              base_url="https://test"))
+                                              base_url="https://test",
+                                              cookies={settings.auth_cookie_name: create_token(str(uid))}))
         yield ids, clients
     finally:
         for client in clients:
@@ -232,7 +235,7 @@ async def test_transaction_failure_rolls_back_and_releases_locks(accounts, monke
     assert await count(ids[0]) == 10
 
 
-async def test_redis_outage_does_not_change_device_admission_or_cleanup(accounts, monkeypatch):
+async def test_redis_outage_blocks_http_registration_but_preserves_repository_and_cleanup(accounts, monkeypatch):
     ids, clients = accounts
 
     def unavailable(*args, **kwargs):
@@ -243,9 +246,11 @@ async def test_redis_outage_does_not_change_device_admission_or_cleanup(accounts
     for _ in range(10):
         url = endpoint()
         urls.append(url)
-        assert (await register(clients[0], url)).status_code == 201
-    assert (await register(clients[0], endpoint())).status_code == 409
+        await repo.upsert_push_subscription(ids[0], url, "key", "auth")
+    assert (await register(clients[0], endpoint())).status_code == 503
+    with pytest.raises(repo.PushDeviceLimitReached):
+        await repo.upsert_push_subscription(ids[0], endpoint(), "key", "auth")
     assert (await clients[0].request("DELETE", "/api/push/subscribe",
                                     json={"endpoint": urls[0]})).status_code == 204
-    assert (await register(clients[0], endpoint())).status_code == 201
+    await repo.upsert_push_subscription(ids[0], endpoint(), "key", "auth")
     assert await count(ids[0]) == 10

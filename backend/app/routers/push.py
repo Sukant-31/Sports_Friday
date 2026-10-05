@@ -48,8 +48,9 @@ async def vapid_public_key() -> dict:
 
 
 @router.post("/subscribe", status_code=status.HTTP_201_CREATED)
+@limiter.limit("20/minute")
 async def subscribe(
-    body: PushSubscribe, user_id: Annotated[UUID, Depends(get_current_user_id)]
+    request: Request, body: PushSubscribe, user_id: Annotated[UUID, Depends(get_current_user_id)]
 ) -> dict:
     try:
         await push_repo.upsert_push_subscription(

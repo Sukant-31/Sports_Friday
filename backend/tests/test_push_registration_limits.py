@@ -8,6 +8,7 @@ from uuid import uuid4
 import httpx
 import pytest
 import pytest_asyncio
+from redis.exceptions import ConnectionError
 
 from app import db
 from app.deps import get_current_user_id
@@ -166,7 +167,7 @@ async def test_trailing_slash_cannot_bypass_body_limit(api):
     store.assert_not_awaited()
 
 
-async def test_redis_outage_does_not_block_boundary_registration_or_legacy_cleanup(api, monkeypatch):
+async def test_redis_outage_blocks_registration_but_not_legacy_cleanup(api, monkeypatch):
     client, _app, _user, store, delete = api
 
     def unavailable(*args, **kwargs):
@@ -175,8 +176,8 @@ async def test_redis_outage_does_not_block_boundary_registration_or_legacy_clean
     monkeypatch.setattr(limiter._storage, "lua_incr_expire", unavailable)
     response = await client.post("/api/push/subscribe", content=padded_body(BODY_BYTES),
                                  headers={"Content-Type": "application/json"})
-    assert response.status_code == 201
-    store.assert_awaited_once()
+    assert response.status_code == 503
+    store.assert_not_awaited()
     response = await client.request("DELETE", "/api/push/subscribe",
                                     json={"endpoint": "http://localhost/legacy"})
     assert response.status_code == 204

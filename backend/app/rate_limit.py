@@ -28,7 +28,7 @@ class RedisLimiter(Limiter):
 def request_identity(request) -> str:
     # Credentials endpoints always use the peer, even if a cookie is supplied.
     # Caller-controlled forwarding headers are never identity authorities.
-    if request.url.path in {"/api/teams/search", "/api/push/test"}:
+    if request.url.path in {"/api/teams/search", "/api/push/test", "/api/push/subscribe"}:
         token = request.cookies.get(settings.auth_cookie_name)
         if token:
             try:

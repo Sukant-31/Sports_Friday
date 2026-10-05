@@ -234,7 +234,7 @@ async def test_outage_and_accessible_routes(monkeypatch):
                 "/api/push/subscribe",
                 json={"endpoint": endpoint, "keys": {"p256dh": "key", "auth": "auth"}},
             )
-        ).status_code == 201
+        ).status_code == 503
         assert (
             await client.request("DELETE", "/api/push/subscribe", json={"endpoint": endpoint})
         ).status_code == 204
