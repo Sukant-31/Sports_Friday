@@ -1,11 +1,16 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { api } from './lib/api.js';
-import { authenticateWithPushCleanup, logoutWithPushCleanup } from './pushLifecycle.js';
+import {
+  authenticateWithPushCleanup,
+  logoutWithPushCleanup,
+  resynchronizeExistingBrowserPush,
+} from './pushLifecycle.js';
 import { enablePushNotifications } from './registerSW.js';
 
 function browser(t) {
   const calls = [];
+  const registrations = [];
   let subscription;
   const rows = new Map([['A', new Set(['browser-A', 'other-device'])], ['B', new Set()]]);
   let account = 'A';
@@ -38,12 +43,97 @@ function browser(t) {
   });
   t.mock.method(api, 'logout', async () => { calls.push('logout'); account = null; });
   t.mock.method(api, 'login', async () => { calls.push('login'); account = 'B'; return { user: { id: 'B' } }; });
-  t.mock.method(api, 'registerPush', async ({ endpoint }) => {
-    calls.push('register'); assert.equal(account, 'B'); rows.get(account).add(endpoint);
+  t.mock.method(api, 'registerPush', async (payload) => {
+    calls.push('register');
+    registrations.push({ account, payload });
+    rows.get(account).add(payload.endpoint);
   });
   t.mock.method(api, 'vapidKey', async () => ({ key: 'AQ' }));
-  return { calls, rows, subscription, getAccount: () => account };
+  return {
+    calls,
+    rows,
+    subscription,
+    registrations,
+    getAccount: () => account,
+    rotate(endpoint) {
+      subscription = {
+        endpoint,
+        async unsubscribe() { subscription = null; return true; },
+        toJSON() { return { endpoint, keys: { p256dh: 'rotated-key', auth: 'rotated-auth' } }; },
+      };
+    },
+  };
 }
+
+test('existing browser subscription is resynchronized without another browser subscription', async (t) => {
+  const state = browser(t);
+  assert.equal(await resynchronizeExistingBrowserPush(), true);
+  assert.deepEqual(state.calls, ['register']);
+  assert.deepEqual(state.registrations, [{
+    account: 'A',
+    payload: { endpoint: 'browser-A', keys: { p256dh: 'key', auth: 'auth' } },
+  }]);
+  assert.deepEqual([...state.rows.get('A')], ['browser-A', 'other-device']);
+});
+
+test('rotated browser subscription is registered for the authenticated account', async (t) => {
+  const state = browser(t);
+  state.rotate('browser-A-rotated');
+  assert.equal(await resynchronizeExistingBrowserPush(), true);
+  assert.deepEqual(state.registrations, [{
+    account: 'A',
+    payload: {
+      endpoint: 'browser-A-rotated',
+      keys: { p256dh: 'rotated-key', auth: 'rotated-auth' },
+    },
+  }]);
+  assert.ok(state.rows.get('A').has('browser-A-rotated'));
+  assert.deepEqual([...state.rows.get('B')], []);
+});
+
+test('repeated resynchronization reuses the endpoint instead of adding duplicate rows', async (t) => {
+  const state = browser(t);
+  await resynchronizeExistingBrowserPush();
+  await resynchronizeExistingBrowserPush();
+  assert.equal(state.registrations.length, 2);
+  assert.deepEqual([...state.rows.get('A')], ['browser-A', 'other-device']);
+});
+
+test('concurrent resynchronization shares one registration request', async (t) => {
+  const state = browser(t);
+  let release;
+  const pending = new Promise((resolve) => { release = resolve; });
+  t.mock.method(api, 'registerPush', async () => pending);
+  const first = resynchronizeExistingBrowserPush();
+  const second = resynchronizeExistingBrowserPush();
+  assert.equal(first, second);
+  release();
+  assert.deepEqual(await Promise.all([first, second]), [true, true]);
+  assert.equal(api.registerPush.mock.callCount(), 1);
+  assert.deepEqual(state.rows.get('B').size, 0);
+});
+
+test('missing or unsupported browser subscription is a safe no-op', async (t) => {
+  const state = browser(t);
+  await state.subscription.unsubscribe();
+  state.calls.length = 0;
+  assert.equal(await resynchronizeExistingBrowserPush(), false);
+  assert.deepEqual(state.calls, []);
+
+  Object.defineProperty(globalThis, 'navigator', { configurable: true, value: {} });
+  assert.equal(await resynchronizeExistingBrowserPush(), false);
+});
+
+test('resynchronization failure is best-effort and does not change authentication', async (t) => {
+  const state = browser(t);
+  await authenticateWithPushCleanup(api.login, 'b@example.com', 'password');
+  state.rotate('browser-B');
+  t.mock.method(api, 'registerPush', async () => { throw new Error('Redis unavailable'); });
+  assert.equal(await resynchronizeExistingBrowserPush(), false);
+  assert.equal(state.getAccount(), 'B');
+  assert.deepEqual([...state.rows.get('A')], ['other-device']);
+  assert.deepEqual([...state.rows.get('B')], []);
+});
 
 test('logout detaches only this browser before clearing authentication', async (t) => {
   const state = browser(t);

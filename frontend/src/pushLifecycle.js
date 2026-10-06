@@ -1,9 +1,34 @@
 import { api } from './lib/api.js';
 
+let resynchronization;
+
 export async function existingBrowserPush() {
   if (!globalThis.navigator?.serviceWorker?.getRegistration) return null;
   const registration = await navigator.serviceWorker.getRegistration('/');
   return registration?.pushManager?.getSubscription() ?? null;
+}
+
+// Best-effort foreground repair for browser-managed subscription rotation.
+// Never create a subscription here: permission and subscription creation stay
+// behind the existing explicit user gesture in enablePushNotifications().
+export function resynchronizeExistingBrowserPush() {
+  if (resynchronization) return resynchronization;
+  resynchronization = (async () => {
+    try {
+      const subscription = await existingBrowserPush();
+      if (!subscription) return false;
+      const json = subscription.toJSON();
+      await api.registerPush({ endpoint: json.endpoint, keys: json.keys });
+      return true;
+    } catch {
+      // Authentication is already established by the caller. A transient
+      // browser/API/Redis failure must not turn a successful login into one.
+      return false;
+    }
+  })().finally(() => {
+    resynchronization = undefined;
+  });
+  return resynchronization;
 }
 
 // Fail closed: keep the session until both remote and local cleanup succeed.

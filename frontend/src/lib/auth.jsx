@@ -1,6 +1,10 @@
 import { createContext, useContext, useState, useCallback, useEffect } from 'react';
 import { api } from './api.js';
-import { authenticateWithPushCleanup, logoutWithPushCleanup } from '../pushLifecycle.js';
+import {
+  authenticateWithPushCleanup,
+  logoutWithPushCleanup,
+  resynchronizeExistingBrowserPush,
+} from '../pushLifecycle.js';
 
 const AuthContext = createContext(null);
 
@@ -18,6 +22,10 @@ export function AuthProvider({ children }) {
       .catch(() => setUser(null))
       .finally(() => setLoading(false));
   }, []);
+
+  useEffect(() => {
+    if (user) void resynchronizeExistingBrowserPush();
+  }, [user]);
 
   const login = useCallback(async (email, password) => {
     const { user } = await authenticateWithPushCleanup(api.login, email, password);
