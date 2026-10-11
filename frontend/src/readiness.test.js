@@ -2,6 +2,21 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { inflateSync } from 'node:zlib';
+import React from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { createServer } from 'vite';
+
+test('Settings shows loading rather than claiming the user follows no teams', async () => {
+  const server = await createServer({ server: { middlewareMode: true }, appType: 'custom' });
+  try {
+    const { default: Settings } = await server.ssrLoadModule('/src/pages/Settings.jsx');
+    const html = renderToStaticMarkup(React.createElement(Settings));
+    assert.match(html, /Loading notification settings/);
+    assert.doesNotMatch(html, /not following any teams/);
+  } finally {
+    await server.close();
+  }
+});
 
 test('all existing icon references resolve to a valid manifest-sized PNG', async () => {
   const manifest = JSON.parse(await readFile('public/manifest.webmanifest', 'utf8'));

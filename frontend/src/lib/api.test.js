@@ -42,13 +42,23 @@ test('push deregistration sends only the current endpoint with authentication', 
   assert.equal(await api.unregisterPush('current-browser'), null);
 });
 
-test('match-detail reads forward cancellation without changing cookies', async (t) => {
+test('API surfaces validation details without reflecting submitted password values', async (t) => {
+  t.mock.method(globalThis, 'fetch', async () => new Response(JSON.stringify({
+    detail: [{ loc: ['body', 'password'], msg: 'Value error, Password must be at most 72 UTF-8 bytes',
+      input: 'must-not-display-this-secret' }],
+  }), { status: 422 }));
+  await assert.rejects(api.signup('example@example.com', 'dummy-password'), (error) =>
+    error.status === 422 && error.message.includes('password:') &&
+    error.message.includes('72 UTF-8 bytes') && !error.message.includes('must-not-display'));
+});
+
+test('match-detail and settings reads forward cancellation without changing cookies', async (t) => {
   const controller = new AbortController();
-  t.mock.method(globalThis, 'fetch', async (url, options) => {
-    assert.equal(url, '/api/matches/match');
+  t.mock.method(globalThis, 'fetch', async (_url, options) => {
     assert.equal(options.signal, controller.signal);
     assert.equal(options.credentials, 'include');
-    return new Response(JSON.stringify({ match: { id: 'match' }, events: [] }));
+    return new Response(JSON.stringify({ subscriptions: [] }));
   });
   await api.matchDetail('match', { signal: controller.signal });
+  await api.listSubscriptions({ signal: controller.signal });
 });

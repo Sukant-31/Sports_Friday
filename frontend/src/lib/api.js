@@ -13,7 +13,11 @@ async function request(path, { method = 'GET', body, signal } = {}) {
   if (res.status === 204) return null;
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
-    const detail = typeof data.detail === 'string' ? data.detail : null;
+    const detail = typeof data.detail === 'string' ? data.detail
+      : Array.isArray(data.detail) ? data.detail
+        .filter((item) => typeof item?.msg === 'string')
+        .map((item) => `${(Array.isArray(item.loc) ? item.loc.filter((part) => part !== 'body').join('.') : '') || 'Request'}: ${item.msg}`)
+        .join('; ') || null : null;
     const error = new Error(data.error ?? detail ?? `Request failed (${res.status})`);
     error.status = res.status;
     throw error;
@@ -29,7 +33,7 @@ export const api = {
 
   searchTeams: (q) => request(`/teams/search?q=${encodeURIComponent(q)}`),
 
-  listSubscriptions: () => request('/subscriptions'),
+  listSubscriptions: ({ signal } = {}) => request('/subscriptions', { signal }),
   subscribe: (teamId, prefs = {}) => request('/subscriptions', { method: 'POST', body: { teamId, ...prefs } }),
   updateSubscription: (id, prefs) => request(`/subscriptions/${id}`, { method: 'PATCH', body: prefs }),
   unsubscribe: (id) => request(`/subscriptions/${id}`, { method: 'DELETE' }),

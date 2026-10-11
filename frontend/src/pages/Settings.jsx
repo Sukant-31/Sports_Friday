@@ -1,18 +1,34 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from '../lib/api.js';
+import { createLatestRequest } from '../lib/latestRequest.js';
 import NotificationToggle from '../components/NotificationToggle.jsx';
 
 export default function Settings() {
-  const [subs, setSubs] = useState([]);
+  const [subs, setSubs] = useState(null);
   const [error, setError] = useState(null);
   const saving = useRef(new Set());
   const [pending, setPending] = useState(new Set());
 
-  useEffect(() => {
-    api.listSubscriptions()
-      .then((d) => setSubs(d.subscriptions))
-      .catch((e) => setError(e.message));
+  const [loading, setLoading] = useState(true);
+  const reads = useRef(createLatestRequest());
+  const load = useCallback(async () => {
+    const request = reads.current.start();
+    setLoading(true);
+    setError(null);
+    try {
+      const data = await api.listSubscriptions({ signal: request.signal });
+      if (request.isCurrent()) setSubs(data.subscriptions);
+    } catch (e) {
+      if (request.isCurrent()) setError(e.message);
+    } finally {
+      if (request.isCurrent()) setLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    load();
+    return () => reads.current.cancel();
+  }, [load]);
 
   // DB rows use snake_case (notify_goals); the API PATCH body expects camelCase.
   const API_FIELD = {
@@ -54,8 +70,12 @@ export default function Settings() {
   return (
     <section>
       <h1>Notification settings</h1>
-      {error && <p className="error">{error}</p>}
-      {subs.length === 0 ? (
+      {error && <p role="alert" className="error">{error}</p>}
+      {loading ? (
+        <p role="status" className="muted">Loading notification settings…</p>
+      ) : subs === null ? (
+        <button onClick={load}>Retry loading settings</button>
+      ) : subs.length === 0 ? (
         <p className="muted">You're not following any teams yet.</p>
       ) : (
         <ul className="list">
