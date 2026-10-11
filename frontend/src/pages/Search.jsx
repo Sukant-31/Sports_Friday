@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../lib/api.js';
+import { createTeamFollowController } from '../lib/teamFollow.js';
 import { createTeamSearchController } from '../lib/teamSearch.js';
 import TeamCard from '../components/TeamCard.jsx';
 
@@ -17,6 +18,14 @@ export default function Search() {
   const input = useRef(null);
   const debounce = useRef(null);
   const searchController = useRef(null);
+  const followController = useRef(null);
+
+  function setFollowed(teamId, followed) {
+    setResults((prev) => prev.map((team) =>
+      (team.id === teamId ? { ...team, followed } : team)));
+    setSuggestions((prev) => prev.map((team) =>
+      (team.id === teamId ? { ...team, followed } : team)));
+  }
 
   if (!searchController.current) {
     searchController.current = createTeamSearchController({
@@ -33,6 +42,19 @@ export default function Search() {
       },
       onError(err) { setError(err.message); },
       onFinish() { setLoading(false); },
+    });
+  }
+
+  if (!followController.current) {
+    followController.current = createTeamFollowController({
+      request: (teamId) => api.subscribe(teamId),
+      onOptimistic(team) {
+        setError(null);
+        setFollowed(team.id, true);
+      },
+      onSuccess(_team, { subscription }) { setWarning(subscription.warning); },
+      onRollback(team) { setFollowed(team.id, false); },
+      onError(err) { setError(err.message); },
     });
   }
 
@@ -87,16 +109,7 @@ export default function Search() {
     }
   }
 
-  async function follow(team) {
-    try {
-      const { subscription } = await api.subscribe(team.id);
-      setWarning(subscription.warning);
-      setResults((prev) => prev.map((t) => (t.id === team.id ? { ...t, followed: true } : t)));
-      setSuggestions((prev) => prev.map((t) => (t.id === team.id ? { ...t, followed: true } : t)));
-    } catch (err) {
-      setError(err.message);
-    }
-  }
+  function follow(team) { return followController.current.follow(team); }
 
   return (
     <section>
