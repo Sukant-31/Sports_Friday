@@ -7,6 +7,7 @@ import bcrypt
 import httpx
 import pytest
 from fastapi import HTTPException
+from pydantic import ValidationError
 
 from app.email_normalization import normalize_email
 from app.main import create_app
@@ -15,10 +16,16 @@ from app.services import auth_service
 
 VARIANTS = [
     ("Alice@EXAMPLE.COM", "Alice@example.com"),
-    (" \tAlice@example.com\n", "Alice@example.com"),
+    (" \tAlice@example.com ", "Alice@example.com"),
     ("e\u0301@example.com", "é@example.com"),
     ("Alice@xn--bcher-kva.de", "Alice@bücher.de"),
     ("Alice@BÜCHER.DE", "Alice@bücher.de"),
+]
+
+CRLF_VARIANTS = [
+    "Alice@example.com\n",
+    "Alice@example.com\r",
+    "Alice\r\n@example.com",
 ]
 
 
@@ -31,6 +38,14 @@ def test_shared_normalization_matches_signup(original, canonical):
 def test_local_part_case_is_preserved():
     assert normalize_email("Alice@EXAMPLE.COM") == "Alice@example.com"
     assert normalize_email("alice@EXAMPLE.COM") == "alice@example.com"
+
+
+@pytest.mark.parametrize("email", CRLF_VARIANTS)
+def test_shared_normalization_and_signup_schema_reject_crlf(email):
+    with pytest.raises(ValidationError, match="Carriage return and line feed"):
+        normalize_email(email)
+    with pytest.raises(ValidationError, match="Carriage return and line feed"):
+        Credentials(email=email, password="valid-password")
 
 
 @pytest.mark.parametrize("original,canonical", VARIANTS)
@@ -63,6 +78,23 @@ async def test_canonical_duplicate_signup_rejected(monkeypatch, original, canoni
     hashing.assert_not_called()
 
 
+@pytest.mark.parametrize("email", CRLF_VARIANTS)
+async def test_signup_rejects_crlf_before_authentication_work(monkeypatch, email):
+    lookup = AsyncMock()
+    create = AsyncMock()
+    hashing = Mock()
+    monkeypatch.setattr(auth_service.users_repo, "find_user_by_email", lookup)
+    monkeypatch.setattr(auth_service.users_repo, "create_user", create)
+    monkeypatch.setattr(auth_service, "hash_password", hashing)
+
+    with pytest.raises(ValidationError, match="Carriage return and line feed"):
+        await auth_service.signup(email, "valid-password")
+
+    lookup.assert_not_awaited()
+    create.assert_not_awaited()
+    hashing.assert_not_called()
+
+
 @pytest.mark.parametrize("original,canonical", VARIANTS)
 async def test_login_tries_original_then_canonical(monkeypatch, original, canonical):
     user = {"id": uuid4(), "email": canonical, "password_hash": "synthetic-hash"}
@@ -76,6 +108,21 @@ async def test_login_tries_original_then_canonical(monkeypatch, original, canoni
     verify.assert_called_once_with("valid-password", unchanged["password_hash"])
     assert result == {"id": unchanged["id"], "email": unchanged["email"]}
     assert user == unchanged
+
+
+@pytest.mark.parametrize("email", CRLF_VARIANTS)
+async def test_login_rejects_crlf_canonical_fallback(monkeypatch, email):
+    lookup = AsyncMock(return_value=None)
+    verify = Mock()
+    monkeypatch.setattr(auth_service.users_repo, "find_user_by_email", lookup)
+    monkeypatch.setattr(auth_service, "verify_password", verify)
+
+    with pytest.raises(HTTPException) as error:
+        await auth_service.login(email, "valid-password")
+
+    assert error.value.status_code == 401
+    lookup.assert_awaited_once_with(email)
+    verify.assert_not_called()
 
 
 @pytest.mark.parametrize("email", ["demo@local", "Alice@EXAMPLE.COM", " Alice@example.com "])
