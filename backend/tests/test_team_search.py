@@ -70,9 +70,10 @@ async def test_short_provider_token_uses_cache_without_calling_provider(monkeypa
 
 
 async def test_provider_merge_is_ranked_and_deduplicated(monkeypatch):
-    saved = teams()
+    saved = []
     monkeypatch.setattr(team_service.teams_repo, 'search_teams_cached', AsyncMock(return_value=saved))
-    monkeypatch.setattr(team_service.teams_repo, 'upsert_team', AsyncMock(return_value=saved[0]))
+    discovered = teams(['Manchester United'])[0]
+    monkeypatch.setattr(team_service.teams_repo, 'upsert_team', AsyncMock(return_value=discovered))
     client = SimpleNamespace(search_teams=AsyncMock(return_value={'response': [
         {'team': {'id': 0, 'name': 'Manchester United'}},
     ]}))
@@ -121,6 +122,59 @@ async def test_rich_cache_avoids_provider(monkeypatch):
     result = await team_service.search_teams(request, 'United')
     assert len(result['teams']) == 15
     client.search_teams.assert_not_awaited()
+
+
+@pytest.mark.parametrize('query,name', [
+    ('Fra', 'France'),
+    ('Fran', 'France'),
+    ('France', 'France'),
+    ('Barcelona', 'FC Barcelona'),
+    ('Manchester', 'Manchester United'),
+    ('England', 'England'),
+])
+async def test_useful_cached_match_returns_without_provider(monkeypatch, query, name):
+    saved = teams([name])
+    monkeypatch.setattr(team_service.teams_repo, 'search_teams_cached',
+                        AsyncMock(return_value=saved))
+    client = SimpleNamespace(search_teams=AsyncMock(
+        side_effect=AssertionError('useful local results must not wait for provider'),
+    ))
+    request = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(sports_client=client)))
+
+    first = await team_service.search_teams(request, query)
+    repeated = await team_service.search_teams(request, query)
+
+    assert [team['name'] for team in first['teams']] == [name]
+    assert repeated == first
+    assert first['warning'] is None
+    client.search_teams.assert_not_awaited()
+
+
+async def test_fra_to_france_typing_uses_each_useful_local_result(monkeypatch):
+    saved = teams(['France', 'Eintracht Frankfurt'])
+    cache = AsyncMock(return_value=saved)
+    monkeypatch.setattr(team_service.teams_repo, 'search_teams_cached', cache)
+    client = SimpleNamespace(search_teams=AsyncMock())
+    request = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(sports_client=client)))
+
+    results = [await team_service.search_teams(request, query)
+               for query in ('Fra', 'Fran', 'France')]
+
+    assert all(result['teams'] for result in results)
+    assert [call.args[0] for call in cache.await_args_list] == ['fra', 'fran', 'france']
+    client.search_teams.assert_not_awaited()
+
+
+async def test_no_local_match_still_uses_provider_fallback(monkeypatch):
+    monkeypatch.setattr(team_service.teams_repo, 'search_teams_cached',
+                        AsyncMock(return_value=[]))
+    client = SimpleNamespace(search_teams=AsyncMock(return_value={'response': []}))
+    request = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(sports_client=client)))
+
+    result = await team_service.search_teams(request, 'nonexistent team')
+
+    assert result == {'teams': [], 'warning': None}
+    client.search_teams.assert_awaited_once_with('nonexistent')
 
 
 async def test_slow_provider_fallback_is_bounded_and_cancelled(monkeypatch):

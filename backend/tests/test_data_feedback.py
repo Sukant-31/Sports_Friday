@@ -24,14 +24,15 @@ async def test_missing_key_fails_before_making_network_request(monkeypatch):
         await client.aclose()
 
 
-async def test_search_outage_preserves_cache_with_warning(monkeypatch):
-    cached = [{"id": "saved", "name": "Arsenal"}]
+async def test_required_provider_fallback_outage_returns_local_result_with_warning(monkeypatch):
+    cached = []
     monkeypatch.setattr(team_service.teams_repo, "search_teams_cached", AsyncMock(return_value=cached))
     client = SimpleNamespace(search_teams=AsyncMock(side_effect=SportsApiError("quota")))
     request = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(sports_client=client)))
     result = await team_service.search_teams(request, "Arsenal")
     assert result["teams"] == cached
     assert "unavailable" in result["warning"]
+    client.search_teams.assert_awaited_once_with("arsenal")
 
 
 def test_live_data_warning_distinguishes_fresh_stale_and_missing_configuration(monkeypatch):

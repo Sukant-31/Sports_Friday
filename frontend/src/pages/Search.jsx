@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../lib/api.js';
+import { createTeamSearchController } from '../lib/teamSearch.js';
 import TeamCard from '../components/TeamCard.jsx';
 
 export default function Search() {
@@ -13,30 +14,29 @@ export default function Search() {
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(-1);
   const [searched, setSearched] = useState(false);
-  const requestId = useRef(0);
   const input = useRef(null);
   const debounce = useRef(null);
+  const searchController = useRef(null);
 
-  async function search(query, id) {
-    setLoading(true);
-    setError(null);
-    setWarning(null);
-    try {
-      const { teams, warning } = await api.searchTeams(query);
-      if (id !== requestId.current) return;
-      setSuggestions(teams);
-      setResults(teams);
-      setWarning(warning);
-      setSearched(true);
-    } catch (err) {
-      if (id === requestId.current) setError(err.message);
-    } finally {
-      if (id === requestId.current) setLoading(false);
-    }
+  if (!searchController.current) {
+    searchController.current = createTeamSearchController({
+      onStart() {
+        setLoading(true);
+        setError(null);
+        setWarning(null);
+      },
+      onSuccess({ teams, warning }) {
+        setSuggestions(teams);
+        setResults(teams);
+        setWarning(warning);
+        setSearched(true);
+      },
+      onError(err) { setError(err.message); },
+      onFinish() { setLoading(false); },
+    });
   }
 
   useEffect(() => {
-    const id = ++requestId.current;
     const query = q.trim();
     setActive(-1);
     setSuggestions([]);
@@ -46,17 +46,17 @@ export default function Search() {
     setSearched(false);
     setResults([]);
     if (query.length < 3) return;
-    const timer = setTimeout(() => search(query, id), 350);
+    const timer = setTimeout(() => searchController.current.start(query), 350);
     debounce.current = timer;
     return () => {
       clearTimeout(timer);
-      ++requestId.current;
+      searchController.current.cancel({ notify: false });
     };
   }, [q]);
 
   function select(team) {
     clearTimeout(debounce.current);
-    ++requestId.current;
+    searchController.current.cancel();
     setLoading(false);
     setResults([team]);
     input.current?.focus();
@@ -73,7 +73,7 @@ export default function Search() {
     if (q.trim().length < 3) return;
     clearTimeout(debounce.current);
     setOpen(false);
-    search(q.trim(), ++requestId.current);
+    searchController.current.start(q.trim());
   }
 
   function onKeyDown(e) {
@@ -117,7 +117,7 @@ export default function Search() {
             placeholder="Search a team, e.g. Barcelona"
             value={q}
             onFocus={() => setOpen(true)}
-            onChange={(e) => { ++requestId.current; setQ(e.target.value); setOpen(true); }}
+            onChange={(e) => { setQ(e.target.value); setOpen(true); }}
             onKeyDown={onKeyDown}
           />
           <ul id="team-suggestions" className="team-suggestions" role="listbox" aria-label="Matching teams" hidden={!open || suggestions.length === 0}>

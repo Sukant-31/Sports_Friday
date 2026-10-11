@@ -6,7 +6,7 @@ from fastapi import Request
 
 from app.logging_conf import get_logger
 from app.repositories import teams as teams_repo
-from app.services.team_search import LIMIT, normalize_query, rank_teams
+from app.services.team_search import normalize_query, rank_teams
 from app.sports_api import normalize
 from app.sports_api.client import SportsApiError
 
@@ -24,7 +24,10 @@ async def search_teams(request: Request, q: str) -> dict:
         return {"teams": [], "warning": None}
     cached = await teams_repo.search_teams_cached(q)
     ranked_cached = rank_teams(cached, q)
-    if len(ranked_cached) >= LIMIT:
+    # A useful local match is enough for an interactive response. Waiting for
+    # the provider merely to fill all 15 display slots makes query-specific
+    # provider cache misses block otherwise complete searches.
+    if ranked_cached:
         return {"teams": ranked_cached, "warning": None}
 
     client = request.app.state.sports_client
