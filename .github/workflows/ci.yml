@@ -46,7 +46,7 @@ jobs:
           python-version: "3.12"
       - name: Install backend
         working-directory: backend
-        run: pip install -e ".[dev]"
+        run: pip install -r requirements-ci.txt
       - name: Migrate
         working-directory: backend
         run: python scripts/migrate.py
