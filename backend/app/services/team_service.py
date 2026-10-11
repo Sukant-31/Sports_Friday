@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+
 from fastapi import Request
 
 from app.logging_conf import get_logger
@@ -9,6 +11,9 @@ from app.sports_api import normalize
 from app.sports_api.client import SportsApiError
 
 log = get_logger("team_service")
+
+_PROVIDER_SEARCH_TIMEOUT_SECONDS = 2.0
+_LIVE_SEARCH_WARNING = "Live team search is unavailable. Showing saved results; try again later."
 
 
 async def search_teams(request: Request, q: str) -> dict:
@@ -28,7 +33,13 @@ async def search_teams(request: Request, q: str) -> dict:
         provider_query = max(q.split(), key=len) if len(q.split()) > 1 else q
         if len(provider_query) < 3:
             return {"teams": ranked_cached, "warning": None}
-        api_response = await client.search_teams(provider_query)
+        # Team search is interactive and the provider is only a fallback. Do
+        # not make an empty/local result wait for the client's much longer
+        # general-purpose HTTP timeout when API-Football is unavailable.
+        api_response = await asyncio.wait_for(
+            client.search_teams(provider_query),
+            timeout=_PROVIDER_SEARCH_TIMEOUT_SECONDS,
+        )
         normalized = normalize.normalize_team_search(api_response)
         upserted = [
             await teams_repo.upsert_team(t["external_id"], t["name"], t["league"])
@@ -37,7 +48,9 @@ async def search_teams(request: Request, q: str) -> dict:
         ]
         merged = {r["id"]: dict(r) for r in [*cached, *upserted]}
         return {"teams": rank_teams(merged.values(), q), "warning": None}
+    except TimeoutError:
+        log.warning("team search provider timed out after %.1fs", _PROVIDER_SEARCH_TIMEOUT_SECONDS)
+        return {"teams": ranked_cached, "warning": _LIVE_SEARCH_WARNING}
     except SportsApiError as exc:
         log.warning("team search fell back to cache: %s", exc)
-        return {"teams": ranked_cached,
-                "warning": "Live team search is unavailable. Showing saved results; try again later."}
+        return {"teams": ranked_cached, "warning": _LIVE_SEARCH_WARNING}

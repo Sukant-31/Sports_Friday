@@ -1,3 +1,5 @@
+import asyncio
+import time
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -119,6 +121,32 @@ async def test_rich_cache_avoids_provider(monkeypatch):
     result = await team_service.search_teams(request, 'United')
     assert len(result['teams']) == 15
     client.search_teams.assert_not_awaited()
+
+
+async def test_slow_provider_fallback_is_bounded_and_cancelled(monkeypatch):
+    cancelled = asyncio.Event()
+
+    async def slow_search(_query):
+        try:
+            await asyncio.Event().wait()
+        finally:
+            cancelled.set()
+
+    monkeypatch.setattr(team_service.teams_repo, 'search_teams_cached',
+                        AsyncMock(return_value=[]))
+    monkeypatch.setattr(team_service, '_PROVIDER_SEARCH_TIMEOUT_SECONDS', 0.01)
+    client = SimpleNamespace(search_teams=AsyncMock(side_effect=slow_search))
+    request = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(sports_client=client)))
+
+    started = time.perf_counter()
+    result = await team_service.search_teams(request, 'France')
+    elapsed = time.perf_counter() - started
+
+    assert result['teams'] == []
+    assert 'unavailable' in result['warning']
+    assert elapsed < 0.2
+    assert cancelled.is_set()
+    client.search_teams.assert_awaited_once_with('france')
 
 
 def test_multiword_typo_requires_each_word():
